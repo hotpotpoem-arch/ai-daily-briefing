@@ -316,12 +316,15 @@ export default function DailyBriefingPage() {
             <button
               onClick={() => loadStaticBriefings(true)}
               disabled={isRefreshing}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-white shadow-xs hover:bg-stone-800 active:scale-[0.98] disabled:opacity-60 transition-all cursor-pointer"
+              title="刷新简报"
+              className="inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-lg bg-stone-900 p-2 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-medium text-white shadow-xs hover:bg-stone-800 active:scale-[0.98] disabled:opacity-60 transition-all cursor-pointer"
             >
               <RefreshCw
-                className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
+                className={`h-4 w-4 sm:h-3.5 sm:w-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
               />
-              <span>{isRefreshing ? '同步中...' : '刷新简报'}</span>
+              <span className="hidden sm:inline">
+                {isRefreshing ? '同步中...' : '刷新简报'}
+              </span>
             </button>
           </div>
         </div>
