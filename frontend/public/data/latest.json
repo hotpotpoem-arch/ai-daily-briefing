@@ -1,0 +1,101 @@
+{
+  "reportDate": "2026-11-22",
+  "overview": "今日AI领域聚焦于智能体（Agent）基础设施的成熟与安全挑战：开源Agent项目持续活跃，同时供应链安全和提示词泄露事件引发关注，欧洲AI法规也开始通过MCP协议服务Agent。",
+  "stats": {
+    "scannedCount": 13,
+    "selectedCount": 6,
+    "durationSeconds": 5
+  },
+  "articles": [
+    {
+      "id": "ds_1122_001",
+      "category": "开源项目",
+      "title": "openclaw：跨平台AI智能体，真正能做事",
+      "tldr": "开源AI智能体，支持任意操作系统和平台，强调实际执行能力，与用户偏好高度匹配。",
+      "tags": [
+        "AI Agent",
+        "跨平台",
+        "开源"
+      ],
+      "url": "https://github.com/openclaw/openclaw",
+      "sourceName": "GitHub Trending",
+      "score": 4.9,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1122_002",
+      "category": "开源项目",
+      "title": "NousResearch/hermes-agent：与你共同成长的智能体",
+      "tldr": "自适应AI智能体，能够随用户需求进化，开源且与用户兴趣直接相关。",
+      "tags": [
+        "AI Agent",
+        "自适应",
+        "开源"
+      ],
+      "url": "https://github.com/NousResearch/hermes-agent",
+      "sourceName": "GitHub Trending",
+      "score": 4.8,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1122_003",
+      "category": "行业动态",
+      "title": "Together.ai 发生提示词泄露安全事件",
+      "tldr": "Together.ai 披露2026年6-7月期间部分请求的提示词泄露，影响用户隐私与模型安全。",
+      "tags": [
+        "安全",
+        "提示词泄露",
+        "AI平台"
+      ],
+      "url": "https://www.together.ai/blog/security-event-prompt-leakage-for-requests-in-june-and-july-of-2026",
+      "sourceName": "Hacker News",
+      "score": 4.5,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1122_004",
+      "category": "行业动态",
+      "title": "Pandex：通过MCP提供欧洲AI智能体法律",
+      "tldr": "Pandex利用MCP协议为AI智能体提供官方欧洲法律查询服务，助力合规。",
+      "tags": [
+        "AI法规",
+        "MCP",
+        "欧洲"
+      ],
+      "url": "https://www.pandex.io",
+      "sourceName": "Hacker News",
+      "score": 4.3,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1122_005",
+      "category": "开源项目",
+      "title": "morluto/rea：用智能体逆向工程任何事物",
+      "tldr": "开源工具，利用AI智能体从应用行为到原生二进制进行逆向工程，拓展Agent应用场景。",
+      "tags": [
+        "逆向工程",
+        "AI Agent",
+        "开源"
+      ],
+      "url": "https://github.com/morluto/rea",
+      "sourceName": "GitHub Trending",
+      "score": 4.2,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1122_006",
+      "category": "行业动态",
+      "title": "AI供应链安全：Canary Token的发现",
+      "tldr": "Dragos利用Canary Token检测AI供应链中的安全威胁，揭示潜在风险点。",
+      "tags": [
+        "供应链安全",
+        "Canary Token",
+        "AI安全"
+      ],
+      "url": "https://www.dragos.com/blog/ai-supply-chain-security-canary-tokens",
+      "sourceName": "Hacker News",
+      "score": 4.0,
+      "userFeedback": null
+    }
+  ]
+}
