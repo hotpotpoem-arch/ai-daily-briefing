@@ -1,17 +1,32 @@
 {
   "reportDate": "2026-11-22",
-  "overview": "今日AI领域聚焦于智能体（Agent）的实用化与生态建设，开源项目如openclaw和hermes-agent强调跨平台与自适应能力，同时AI治理与伦理讨论（如欧洲AI法律、意识AI神话）热度上升。",
+  "overview": "今日AI领域开源智能体项目持续火热，用户偏好的hermes-agent和openclaw均上榜；同时AI治理与意识哲学讨论受到关注，欧洲推出面向AI Agent的法律框架。",
   "stats": {
     "scannedCount": 10,
     "selectedCount": 6,
-    "durationSeconds": 5
+    "durationSeconds": 25
   },
   "articles": [
     {
       "id": "ds_1122_001",
       "category": "开源项目",
+      "title": "NousResearch/hermes-agent：与你共同成长的智能体",
+      "tldr": "开源自适应AI智能体，能够随用户使用不断进化成长，契合个性化Agent需求。",
+      "tags": [
+        "AI Agent",
+        "自适应",
+        "开源"
+      ],
+      "url": "https://github.com/NousResearch/hermes-agent",
+      "sourceName": "GitHub Trending",
+      "score": 4.9,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1122_002",
+      "category": "开源项目",
       "title": "openclaw：跨平台AI智能体，真正能做事",
-      "tldr": "开源AI智能体，支持任何操作系统和平台，强调实际执行能力，采用“龙虾方式”。",
+      "tldr": "支持任意操作系统与平台的AI智能体，强调实际执行能力，开源且跨平台。",
       "tags": [
         "AI Agent",
         "跨平台",
@@ -23,29 +38,14 @@
       "userFeedback": null
     },
     {
-      "id": "ds_1122_002",
-      "category": "开源项目",
-      "title": "NousResearch/hermes-agent：与你共同成长的智能体",
-      "tldr": "开源自适应AI智能体，能够随用户需求成长，注重个性化与进化能力。",
-      "tags": [
-        "AI Agent",
-        "自适应",
-        "开源"
-      ],
-      "url": "https://github.com/NousResearch/hermes-agent",
-      "sourceName": "GitHub Trending",
-      "score": 4.8,
-      "userFeedback": null
-    },
-    {
       "id": "ds_1122_003",
       "category": "行业动态",
-      "title": "Pandex：面向AI智能体的欧洲官方法律，基于MCP",
-      "tldr": "提供欧洲针对AI智能体的官方法律框架，通过MCP协议集成，助力合规部署。",
+      "title": "Pandex：基于MCP的欧洲AI Agent官方法律框架",
+      "tldr": "欧洲推出面向AI Agent的法律框架，通过MCP协议提供合规支持，获94点热度。",
       "tags": [
         "AI治理",
-        "欧洲法律",
-        "MCP"
+        "MCP",
+        "欧洲法规"
       ],
       "url": "https://www.pandex.io",
       "sourceName": "Hacker News",
@@ -56,11 +56,11 @@
       "id": "ds_1122_004",
       "category": "开源项目",
       "title": "morluto/rea：用智能体逆向工程任何事物",
-      "tldr": "开源工具，利用智能体从应用行为到原生二进制进行逆向工程，扩展AI在安全分析中的应用。",
+      "tldr": "利用AI智能体逆向分析应用行为乃至原生二进制文件，GitHub高星项目。",
       "tags": [
-        "逆向工程",
         "AI Agent",
-        "安全"
+        "逆向工程",
+        "开源"
       ],
       "url": "https://github.com/morluto/rea",
       "sourceName": "GitHub Trending",
@@ -69,32 +69,32 @@
     },
     {
       "id": "ds_1122_005",
-      "category": "行业动态",
-      "title": "意识AI的神话",
-      "tldr": "探讨AI意识概念的迷思，分析其文化根源与对AI发展的影响，引发伦理思考。",
+      "category": "开源项目",
+      "title": "firecrawl：让智能体更聪明的知识基础设施",
+      "tldr": "通过统一API搜索、抓取并接入550+数据源，为AI智能体提供知识增强。",
       "tags": [
-        "AI伦理",
-        "意识",
-        "哲学"
+        "AI Agent",
+        "数据抓取",
+        "知识库"
       ],
-      "url": "https://www.noemamag.com/the-mythology-of-conscious-ai/",
-      "sourceName": "Hacker News",
-      "score": 4.3,
+      "url": "https://github.com/firecrawl/firecrawl",
+      "sourceName": "GitHub Trending",
+      "score": 4.4,
       "userFeedback": null
     },
     {
       "id": "ds_1122_006",
-      "category": "开源项目",
-      "title": "firecrawl：让智能体更智能的知识基础设施",
-      "tldr": "通过单一API搜索、抓取和访问550+数据提供商，为AI智能体提供知识支持。",
+      "category": "论文速递",
+      "title": "意识AI的神话",
+      "tldr": "Noema杂志探讨AI意识叙事的迷思，反思将意识赋予AI的文化与哲学风险。",
       "tags": [
-        "知识基础设施",
-        "API",
-        "数据抓取"
+        "AI意识",
+        "哲学",
+        "伦理"
       ],
-      "url": "https://github.com/firecrawl/firecrawl",
-      "sourceName": "GitHub Trending",
-      "score": 4.2,
+      "url": "https://www.noemamag.com/the-mythology-of-conscious-ai/",
+      "sourceName": "Hacker News",
+      "score": 4.3,
       "userFeedback": null
     }
   ]
