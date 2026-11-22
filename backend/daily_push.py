@@ -1,4 +1,6 @@
+import json
 import os
+from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
@@ -6,6 +8,37 @@ from dotenv import load_dotenv
 from pipeline import generate_daily_briefing
 
 load_dotenv()
+
+
+def export_static_json(report: dict) -> None:
+    """将简报按日期归档导出到前端静态目录，供 Cloudflare Pages 直接读取"""
+    project_root = Path(__file__).resolve().parent.parent
+    data_dir = project_root / "frontend" / "public" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. 保存最新一份简报
+    latest_path = data_dir / "latest.json"
+    latest_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    # 2. 按日期合并到历史归档 briefings.json（最新日期排在前面）
+    archive_path = data_dir / "briefings.json"
+    archive: dict = {}
+    if archive_path.exists():
+        try:
+            archive = json.loads(archive_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            archive = {}
+
+    report_date = report.get("reportDate", "unknown")
+    archive[report_date] = report
+    sorted_archive = dict(sorted(archive.items(), reverse=True))
+
+    archive_path.write_text(
+        json.dumps(sorted_archive, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"[导出成功] 静态数据已更新至 {archive_path}")
 
 
 def format_markdown(report: dict) -> str:
@@ -56,10 +89,14 @@ def push_to_wechat(title: str, content: str) -> None:
 
 
 if __name__ == "__main__":
-    print("[1/2] 正在抓取并调用 DeepSeek 生成今日简报...")
+    print("[1/3] 正在抓取并调用 DeepSeek 生成今日简报...")
     report = generate_daily_briefing()
+
+    print("[2/3] 正在导出静态 JSON 数据供前端网页使用...")
+    export_static_json(report)
+
     md_content = format_markdown(report)
     title = f"AI 每日简报 | {report.get('reportDate', '')}"
 
-    print("[2/2] 正在推送到微信...")
+    print("[3/3] 正在推送到微信...")
     push_to_wechat(title, md_content)
