@@ -33,9 +33,10 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          WXPUSHER_APP_TOKEN: AT_Ru536IYVMvsQlqjFWAaOnWHyfcbOdV0W
-          WXPUSHER_UID: UID_bzCKmis6rlZCVdaknybZuByI9HJO
+          WECHAT_APP_ID: ${{ secrets.WECHAT_APP_ID }}
+          WECHAT_APP_SECRET: ${{ secrets.WECHAT_APP_SECRET }}
+          WECHAT_OPEN_ID: ${{ secrets.WECHAT_OPEN_ID }}
+          WECHAT_TEMPLATE_ID: ${{ secrets.WECHAT_TEMPLATE_ID }}
         run: |
           python daily_push.py
 
