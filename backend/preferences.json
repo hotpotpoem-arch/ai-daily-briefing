@@ -1,21 +1,21 @@
 {
   "liked": [
     {
-      "title": "openclaw：跨平台AI智能体，真正能做事",
-      "category": "开源项目",
-      "tags": [
-        "AI Agent",
-        "跨平台",
-        "开源"
-      ]
-    },
-    {
       "title": "Pandex：面向AI智能体的欧洲官方法律框架，基于MCP",
       "category": "行业动态",
       "tags": [
         "AI监管",
         "法律框架",
         "MCP"
+      ]
+    },
+    {
+      "title": "openclaw：跨平台AI智能体，真正能做事",
+      "category": "开源项目",
+      "tags": [
+        "AI Agent",
+        "跨平台",
+        "开源"
       ]
     },
     {
