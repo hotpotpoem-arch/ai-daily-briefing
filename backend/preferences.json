@@ -1,6 +1,13 @@
 {
   "liked": [
     {
+      "title": "测试文章",
+      "category": "AI",
+      "tags": [
+        "测试"
+      ]
+    },
+    {
       "title": "NousResearch/hermes-agent：与你共同成长的智能体",
       "category": "开源项目",
       "tags": [
