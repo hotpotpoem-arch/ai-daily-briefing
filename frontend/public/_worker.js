@@ -1,129 +1,216 @@
 /* eslint-disable */
-function decodeBase64UTF8(base64) {
-  const binString = atob(base64.replace(/\n/g, ''));
-  const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));
-  return new TextDecoder().decode(bytes);
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+function jsonResp(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS },
+  });
 }
 
-function encodeBase64UTF8(str) {
-  const bytes = new TextEncoder().encode(str);
-  const binString = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join('');
-  return btoa(binString);
-}
-
-function renderHtml(icon, title, desc) {
-  return new Response(
-    `<!DOCTYPE html>
-    <html lang="zh-CN">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>AI 简报偏好反馈</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #FAF9F6; color: #1c1917; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-        .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 16px; padding: 32px 24px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.04); }
-        .icon { font-size: 42px; margin-bottom: 12px; }
-        h1 { font-size: 18px; margin: 0 0 8px; }
-        p { font-size: 14px; color: #57534e; line-height: 1.6; margin: 0 0 20px; }
-        a { display: inline-block; background: #1c1917; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 10px; font-size: 14px; }
-      </style>
-    </head>
-    <body>
-      <div class="card">
-        <div class="icon">${icon}</div>
-        <h1>${title}</h1>
-        <p>${desc}</p>
-        <a href="https://ai-daily-briefing-543.pages.dev">返回网页版简报</a>
-      </div>
-    </body>
-    </html>`,
-    { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-  );
+function isAuthorized(request, env) {
+  const secret = env.INGEST_SECRET;
+  if (!secret) return false;
+  return request.headers.get('Authorization') === `Bearer ${secret}`;
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // 不是 /api/feedback 的请求，直接放行去加载正常的网页静态文件
-    if (!url.pathname.startsWith('/api/feedback')) {
-      return env.ASSETS.fetch(request);
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
-    const isJson = url.searchParams.get('format') === 'json';
-    const respond = (ok, icon, title, desc, status = 200) => {
-      if (isJson) {
-        return new Response(JSON.stringify({ ok, title, desc }), {
-          status,
-          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    // 1. 记录/取消用户偏好反馈（按 uid 隔离）
+    if (url.pathname === '/api/feedback' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const uid = (body.uid || 'default').trim();
+        const articleId = body.articleId;
+        const action = body.action; // 'like' | 'dislike' | null
+
+        if (!articleId) return jsonResp({ error: '缺少 articleId' }, 400);
+
+        // 自动确保用户存在于 users 表
+        await env.DB.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').bind(uid).run();
+
+        if (!action) {
+          await env.DB.prepare(
+            'DELETE FROM user_feedback WHERE uid = ? AND article_id = ?'
+          ).bind(uid, articleId).run();
+        } else {
+          await env.DB.prepare(
+            `INSERT INTO user_feedback (uid, article_id, title, category, tags, action, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(uid, article_id) DO UPDATE SET
+               action = excluded.action,
+               updated_at = CURRENT_TIMESTAMP`
+          ).bind(
+            uid,
+            articleId,
+            body.title || '',
+            body.category || '',
+            JSON.stringify(body.tags || []),
+            action
+          ).run();
+        }
+
+        return jsonResp({ ok: true, uid, articleId, action });
+      } catch (err) {
+        return jsonResp({ error: err.message }, 500);
+      }
+    }
+
+    // 2. 获取个性化重排后的简报
+    if (url.pathname === '/api/briefing' && request.method === 'GET') {
+      try {
+        const uid = (url.searchParams.get('uid') || 'default').trim();
+        const reqDate = url.searchParams.get('date');
+
+        // 查询所有可用日期
+        const { results: dateRows } = await env.DB.prepare(
+          'SELECT DISTINCT report_date FROM articles ORDER BY report_date DESC LIMIT 30'
+        ).all();
+        const dates = dateRows.map((r) => r.report_date);
+
+        if (dates.length === 0) {
+          return jsonResp({ dates: [], report: null });
+        }
+
+        const targetDate = reqDate && dates.includes(reqDate) ? reqDate : dates[0];
+
+        // 查询当天公共文章池
+        const { results: articleRows } = await env.DB.prepare(
+          'SELECT * FROM articles WHERE report_date = ?'
+        ).bind(targetDate).all();
+
+        // 查询该用户的全部历史偏好，计算标签与分类权重
+        const { results: fbRows } = await env.DB.prepare(
+          'SELECT article_id, category, tags, action FROM user_feedback WHERE uid = ?'
+        ).bind(uid).all();
+
+        const feedbackMap = {};
+        const tagWeights = {};
+        const catWeights = {};
+
+        for (const fb of fbRows) {
+          feedbackMap[fb.article_id] = fb.action;
+          const deltaTag = fb.action === 'like' ? 0.3 : -0.5;
+          const deltaCat = fb.action === 'like' ? 0.2 : -0.3;
+
+          if (fb.category) {
+            catWeights[fb.category] = (catWeights[fb.category] || 0) + deltaCat;
+          }
+          try {
+            const tags = JSON.parse(fb.tags || '[]');
+            for (const t of tags) {
+              tagWeights[t] = (tagWeights[t] || 0) + deltaTag;
+            }
+          } catch {}
+        }
+
+        // 结合基础 AI 评分 + 个人偏好权重进行重排
+        const articles = articleRows.map((row) => {
+          let tags = [];
+          try { tags = JSON.parse(row.tags || '[]'); } catch {}
+
+          let boost = catWeights[row.category] || 0;
+          for (const t of tags) {
+            boost += tagWeights[t] || 0;
+          }
+
+          return {
+            id: row.id,
+            category: row.category,
+            title: row.title,
+            tldr: row.tldr,
+            tags,
+            url: row.url,
+            sourceName: row.source_name,
+            score: Number(row.score || 4.5),
+            userFeedback: feedbackMap[row.id] || null,
+            _rankScore: Number(row.score || 4.5) + boost,
+          };
         });
+
+        articles.sort((a, b) => b._rankScore - a._rankScore);
+        const cleanArticles = articles.map(({ _rankScore, ...rest }) => rest);
+
+        return jsonResp({
+          dates,
+          report: {
+            reportDate: targetDate,
+            overview: articleRows[0]?.overview || '今日 AI 简报已生成。',
+            stats: {
+              scannedCount: cleanArticles.length,
+              selectedCount: cleanArticles.length,
+              durationSeconds: 0,
+            },
+            articles: cleanArticles,
+          },
+        });
+      } catch (err) {
+        return jsonResp({ error: err.message }, 500);
       }
-      return renderHtml(icon, title, desc);
-    };
-
-    const action = url.searchParams.get('action');
-    const title = url.searchParams.get('title');
-    const category = url.searchParams.get('category') || 'AI';
-    const tagsStr = url.searchParams.get('tags') || '';
-    const tags = tagsStr ? tagsStr.split(',').filter(Boolean) : [];
-
-    if (!action || !title || !['like', 'dislike'].includes(action)) {
-      return respond(false, '⚠️', '参数不完整', '无法识别你的反馈内容，请从简报中重新点击。', 400);
     }
 
-    const token = env.GITHUB_TOKEN;
-    const repo = env.GITHUB_REPO || 'hotpotpoem-arch/ai-daily-briefing';
-    const filePath = 'backend/preferences.json';
+    // 3. 定时任务入库接口（写入当日公共文章池）
+    if (url.pathname === '/api/ingest' && request.method === 'POST') {
+      if (!isAuthorized(request, env)) return jsonResp({ error: 'Unauthorized' }, 401);
+      try {
+        const body = await request.json();
+        const { reportDate, overview, articles } = body;
+        if (!reportDate || !Array.isArray(articles)) {
+          return jsonResp({ error: '参数不完整' }, 400);
+        }
 
-    if (!token) {
-      return respond(false, '⚙️', '尚未配置权限', '请在 Cloudflare Pages 后台添加 GITHUB_TOKEN 环境变量。', 500);
-    }
+        // 覆盖当天旧数据
+        await env.DB.prepare('DELETE FROM articles WHERE report_date = ?').bind(reportDate).run();
 
-    const apiUrl = `https://api.github.com/repos/${repo}/contents/${filePath}`;
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'AI-Daily-Briefing-Feedback',
-    };
+        const stmts = articles.map((art) =>
+          env.DB.prepare(
+            `INSERT INTO articles (id, report_date, category, title, tldr, tags, url, source_name, score, overview)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(
+            art.id,
+            reportDate,
+            art.category || '行业动态',
+            art.title || '',
+            art.tldr || '',
+            JSON.stringify(art.tags || []),
+            art.url || '',
+            art.sourceName || '',
+            Number(art.score || 4.5),
+            overview || ''
+          )
+        );
+        if (stmts.length > 0) await env.DB.batch(stmts);
 
-    try {
-      const getRes = await fetch(apiUrl, { headers });
-      if (!getRes.ok) throw new Error(`读取偏好文件失败 (${getRes.status})`);
-      const fileData = await getRes.json();
-      const prefs = JSON.parse(decodeBase64UTF8(fileData.content));
-
-      prefs.liked = Array.isArray(prefs.liked) ? prefs.liked : [];
-      prefs.disliked = Array.isArray(prefs.disliked) ? prefs.disliked : [];
-
-      const newItem = { title, category, tags };
-      prefs.liked = prefs.liked.filter((i) => i.title !== title);
-      prefs.disliked = prefs.disliked.filter((i) => i.title !== title);
-
-      if (action === 'like') {
-        prefs.liked.unshift(newItem);
-        prefs.liked = prefs.liked.slice(0, 20);
-      } else {
-        prefs.disliked.unshift(newItem);
-        prefs.disliked = prefs.disliked.slice(0, 20);
+        return jsonResp({ ok: true, count: articles.length });
+      } catch (err) {
+        return jsonResp({ error: err.message }, 500);
       }
-
-      const putRes = await fetch(apiUrl, {
-        method: 'PUT',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `chore: update user preference (${action})`,
-          content: encodeBase64UTF8(JSON.stringify(prefs, null, 2)),
-          sha: fileData.sha,
-        }),
-      });
-
-      if (!putRes.ok) throw new Error(`写入偏好文件失败 (${putRes.status})`);
-
-      return action === 'like'
-        ? respond(true, '👍', '已记录：感兴趣', `已收藏《${title}》的偏好特征，明天 AI 将优先推荐类似主题。`)
-        : respond(true, '👎', '已记录：不感兴趣', `已记录反馈，后续 AI 将降低此类内容的推荐权重。`);
-    } catch (err) {
-      return respond(false, '❌', '记录失败', `出错了：${err.message}`, 500);
     }
+
+    // 4. 获取已绑定微信 OpenID 的用户列表（供推送脚本使用）
+    if (url.pathname === '/api/users' && request.method === 'GET') {
+      if (!isAuthorized(request, env)) return jsonResp({ error: 'Unauthorized' }, 401);
+      try {
+        const { results } = await env.DB.prepare(
+          'SELECT uid, nickname, wechat_openid FROM users WHERE wechat_openid IS NOT NULL AND wechat_openid != ""'
+        ).all();
+        return jsonResp({ users: results });
+      } catch (err) {
+        return jsonResp({ error: err.message }, 500);
+      }
+    }
+
+    // 其他请求照常返回前端静态页面
+    return env.ASSETS.fetch(request);
   },
 };

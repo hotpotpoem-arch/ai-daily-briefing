@@ -37,6 +37,7 @@ jobs:
           WECHAT_APP_SECRET: ${{ secrets.WECHAT_APP_SECRET }}
           WECHAT_OPEN_ID: ${{ secrets.WECHAT_OPEN_ID }}
           WECHAT_TEMPLATE_ID: ${{ secrets.WECHAT_TEMPLATE_ID }}
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
         run: |
           python daily_push.py
 

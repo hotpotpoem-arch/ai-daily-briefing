@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
-import { Calendar, Cpu, RefreshCw, TrendingUp, Search, Sparkles, Clock, FileText, X } from 'lucide-react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { Calendar, Cpu, RefreshCw, TrendingUp, Search, Sparkles, Clock, FileText, X, User } from 'lucide-react';
 import { ArticleCard } from '@/components/ArticleCard';
 import { DailyReport, FeedbackAction } from '@/types/briefing';
 
@@ -64,7 +64,8 @@ const MOCK_REPORT: DailyReport = {
 };
 
 export default function DailyBriefingPage() {
-  const [archive, setArchive] = useState<Record<string, DailyReport>>({});
+  const [uid, setUid] = useState<string>('default');
+  const [staticArchive, setStaticArchive] = useState<Record<string, DailyReport>>({});
   const [report, setReport] = useState<DailyReport | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('全部');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -78,86 +79,104 @@ export default function DailyBriefingPage() {
     type: 'success' | 'error' | 'info';
   } | null>(null);
 
-  const showToast = (
-    message: string,
-    type: 'success' | 'error' | 'info' = 'success'
-  ) => {
-    setToast({ message, type });
-    setTimeout(() => {
-      setToast((prev) => (prev?.message === message ? null : prev));
-    }, 3000);
-  };
+  const showToast = useCallback(
+    (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+      setToast({ message, type });
+      setTimeout(() => {
+        setToast((prev) => (prev?.message === message ? null : prev));
+      }, 3000);
+    },
+    []
+  );
 
-  const loadStaticBriefings = async (isManualRefresh = false) => {
-    if (isManualRefresh) setIsRefreshing(true);
-    try {
-      // 加时间戳参数避免浏览器缓存旧 JSON
-      const res = await fetch(`/data/briefings.json?t=${Date.now()}`);
-      if (!res.ok) throw new Error('尚未生成静态简报数据');
-      const data: Record<string, DailyReport> = await res.json();
-      const dates = Object.keys(data).sort().reverse();
-
-      if (dates.length === 0) throw new Error('简报归档为空');
-
-      setArchive(data);
-      setAvailableDates(dates);
-      setReport(data[dates[0]]);
-      setIsUsingMock(false);
-
-      if (isManualRefresh) {
-        showToast('已同步最新云端简报（每日早 8:00 自动更新）', 'success');
-      }
-    } catch {
-      setReport(MOCK_REPORT);
-      setIsUsingMock(true);
-      if (isManualRefresh) {
-        showToast('云端尚未生成首份简报，当前为演示数据', 'info');
-      }
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    let active = true;
-    const initLoad = async () => {
+  // 优先从 D1 API 拉取个性化重排后的简报，失败或空库时自动降级到静态 JSON / Mock
+  const fetchBriefing = useCallback(
+    async (targetUid: string, targetDate?: string, isManualRefresh = false) => {
+      if (isManualRefresh) setIsRefreshing(true);
       try {
-        const res = await fetch(`/data/briefings.json?t=${Date.now()}`);
-        if (!res.ok) throw new Error('尚未生成静态简报数据');
-        const data: Record<string, DailyReport> = await res.json();
-        const dates = Object.keys(data).sort().reverse();
-        if (dates.length === 0) throw new Error('简报归档为空');
+        const params = new URLSearchParams({
+          uid: targetUid,
+          t: String(Date.now()),
+        });
+        if (targetDate) params.set('date', targetDate);
 
-        if (active) {
-          setArchive(data);
-          setAvailableDates(dates);
-          setReport(data[dates[0]]);
-          setIsUsingMock(false);
+        const apiRes = await fetch(`/api/briefing?${params.toString()}`);
+        if (apiRes.ok) {
+          const data = await apiRes.json();
+          if (data.report && Array.isArray(data.dates) && data.dates.length > 0) {
+            setAvailableDates(data.dates);
+            setReport(data.report);
+            setIsUsingMock(false);
+            if (isManualRefresh) {
+              showToast('已同步最新云端个性化简报', 'success');
+            }
+            return;
+          }
         }
+        throw new Error('D1 暂无数据，尝试读取静态归档');
       } catch {
-        if (active) {
+        // 降级：读取静态 briefings.json（兼容本地开发或 D1 首次入库前）
+        try {
+          const res = await fetch(`/data/briefings.json?t=${Date.now()}`);
+          if (!res.ok) throw new Error('尚未生成静态简报数据');
+          const data: Record<string, DailyReport> = await res.json();
+          const dates = Object.keys(data).sort().reverse();
+          if (dates.length === 0) throw new Error('简报归档为空');
+
+          const pickDate = targetDate && data[targetDate] ? targetDate : dates[0];
+          setStaticArchive(data);
+          setAvailableDates(dates);
+          setReport(data[pickDate]);
+          setIsUsingMock(false);
+          if (isManualRefresh) {
+            showToast('已同步最新静态简报', 'success');
+          }
+        } catch {
           setReport(MOCK_REPORT);
           setIsUsingMock(true);
+          if (isManualRefresh) {
+            showToast('云端尚未生成首份简报，当前为演示数据', 'info');
+          }
         }
       } finally {
-        if (active) setLoading(false);
+        setLoading(false);
+        setIsRefreshing(false);
       }
-    };
-    initLoad();
-    return () => {
-      active = false;
-    };
-  }, []);
+    },
+    [showToast]
+  );
 
-  const handleDateChange = (date: string) => {
-    const target = archive[date];
-    if (target) {
-      setReport(target);
-      setSelectedCategory('全部');
-      setSearchQuery('');
-      showToast(`已切换至 ${date} 简报`, 'info');
+  // 初始化：解析 URL 中的 ?uid=xxx 或读取 localStorage
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlUid = params.get('uid')?.trim();
+    let activeUid = 'default';
+
+    if (urlUid) {
+      activeUid = urlUid;
+      localStorage.setItem('briefing_uid', urlUid);
+    } else {
+      const savedUid = localStorage.getItem('briefing_uid')?.trim();
+      if (savedUid) activeUid = savedUid;
     }
+
+    const init = async () => {
+      await fetchBriefing(activeUid);
+      setUid(activeUid);
+    };
+    init();
+  }, [fetchBriefing]);
+
+  const handleDateChange = async (date: string) => {
+    setSelectedCategory('全部');
+    setSearchQuery('');
+    if (staticArchive[date]) {
+      setReport(staticArchive[date]);
+      showToast(`已切换至 ${date} 简报`, 'info');
+      return;
+    }
+    await fetchBriefing(uid, date);
+    showToast(`已切换至 ${date} 简报`, 'info');
   };
 
   const handleFeedbackSubmit = async (articleId: string, action: FeedbackAction) => {
@@ -165,40 +184,27 @@ export default function DailyBriefingPage() {
     const targetArticle = report.articles.find((a) => a.id === articleId);
     if (!targetArticle) return;
 
-    // 如果取消点赞/踩，仅更新本地状态
-    if (action !== 'like' && action !== 'dislike') {
-      setReport((prev) =>
-        prev
-          ? {
-              ...prev,
-              articles: prev.articles.map((a) =>
-                a.id === articleId ? { ...a, userFeedback: null } : a
-              ),
-            }
-          : prev
-      );
-      return;
-    }
-
     showToast('正在同步偏好到云端...', 'info');
 
     try {
-      const params = new URLSearchParams({
-        action,
-        title: targetArticle.title,
-        category: targetArticle.category || 'AI',
-        tags: Array.isArray(targetArticle.tags) ? targetArticle.tags.join(',') : '',
-        format: 'json',
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid,
+          articleId,
+          action,
+          title: targetArticle.title,
+          category: targetArticle.category || 'AI',
+          tags: Array.isArray(targetArticle.tags) ? targetArticle.tags : [],
+        }),
       });
 
-      const res = await fetch(`/api/feedback?${params.toString()}`);
       const data = await res.json();
-
       if (!res.ok || !data.ok) {
-        throw new Error(data.desc || '同步失败');
+        throw new Error(data.error || '同步失败');
       }
 
-      // 同步更新当前页面的卡片反馈状态
       setReport((prev) =>
         prev
           ? {
@@ -211,13 +217,16 @@ export default function DailyBriefingPage() {
       );
 
       if (action === 'like') {
-        showToast('已同步至云端：感兴趣，明天将优先推荐同类主题', 'success');
+        showToast('已记录偏好：感兴趣，后续将优先为你推荐同类主题', 'success');
+      } else if (action === 'dislike') {
+        showToast('已记录偏好：后续将降低此类内容权重', 'info');
       } else {
-        showToast('已同步至云端：后续将降低此类内容权重', 'info');
+        showToast('已取消该条反馈', 'info');
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '网络异常，请稍后重试';
       showToast(`偏好记录失败：${message}`, 'error');
+      throw err;
     }
   };
 
@@ -286,6 +295,12 @@ export default function DailyBriefingPage() {
                     演示模式
                   </span>
                 )}
+                {uid !== 'default' && (
+                  <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-600">
+                    <User className="h-3 w-3" />
+                    {uid}
+                  </span>
+                )}
               </div>
               <p className="hidden sm:block text-xs text-stone-500">
                 每日精选 AI 与前沿科技情报
@@ -314,7 +329,7 @@ export default function DailyBriefingPage() {
 
             {/* 同步最新简报按钮 */}
             <button
-              onClick={() => loadStaticBriefings(true)}
+              onClick={() => fetchBriefing(uid, report?.reportDate, true)}
               disabled={isRefreshing}
               title="刷新简报"
               className="inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-lg bg-stone-900 p-2 sm:px-3.5 sm:py-1.5 text-xs sm:text-sm font-medium text-white shadow-xs hover:bg-stone-800 active:scale-[0.98] disabled:opacity-60 transition-all cursor-pointer"
