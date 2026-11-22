@@ -5,9 +5,7 @@ import { Calendar, Cpu, RefreshCw, TrendingUp, Search, Sparkles, Clock, FileText
 import { ArticleCard } from '@/components/ArticleCard';
 import { DailyReport, FeedbackAction } from '@/types/briefing';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-
-// 本地开发兜底 Mock 数据，后端未启动时自动展示
+// 兜底 Mock 数据，首次运行自动化任务前自动展示
 const MOCK_REPORT: DailyReport = {
   reportDate: '2026-11-21',
   overview:
@@ -66,12 +64,13 @@ const MOCK_REPORT: DailyReport = {
 };
 
 export default function DailyBriefingPage() {
+  const [archive, setArchive] = useState<Record<string, DailyReport>>({});
   const [report, setReport] = useState<DailyReport | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('全部');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [isUsingMock, setIsUsingMock] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
 
   const [toast, setToast] = useState<{
@@ -89,56 +88,34 @@ export default function DailyBriefingPage() {
     }, 3000);
   };
 
-  const fetchAvailableDates = async () => {
+  const loadStaticBriefings = async (isManualRefresh = false) => {
+    if (isManualRefresh) setIsRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE}/api/reports/dates`);
-      if (res.ok) {
-        const data = await res.json();
-        setAvailableDates(data.dates || []);
+      // 加时间戳参数避免浏览器缓存旧 JSON
+      const res = await fetch(`/data/briefings.json?t=${Date.now()}`);
+      if (!res.ok) throw new Error('尚未生成静态简报数据');
+      const data: Record<string, DailyReport> = await res.json();
+      const dates = Object.keys(data).sort().reverse();
+
+      if (dates.length === 0) throw new Error('简报归档为空');
+
+      setArchive(data);
+      setAvailableDates(dates);
+      setReport(data[dates[0]]);
+      setIsUsingMock(false);
+
+      if (isManualRefresh) {
+        showToast('已同步最新云端简报（每日早 8:00 自动更新）', 'success');
       }
-    } catch (err) {
-      console.error('获取历史日期失败:', err);
-    }
-  };
-
-  const handleGenerate = async () => {
-    if (isGenerating) return;
-    setIsGenerating(true);
-    showToast('正在抓取最新资讯并调用 DeepSeek 总结...', 'info');
-    try {
-      const res = await fetch(`${API_BASE}/api/reports/generate`, {
-        method: 'POST',
-      });
-      if (!res.ok) throw new Error('生成失败');
-      const data = await res.json();
-      setReport(data);
-      setIsUsingMock(false);
-      await fetchAvailableDates();
-      showToast('今日 AI 简报已更新！', 'success');
-    } catch (err) {
-      console.error(err);
-      showToast('生成失败，请检查后端服务是否已启动', 'error');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleDateChange = async (date: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/reports/${date}`);
-      if (!res.ok) throw new Error('获取历史简报失败');
-      const data = await res.json();
-      setReport(data);
-      setSelectedCategory('全部');
-      setSearchQuery('');
-      setIsUsingMock(false);
-      showToast(`已切换至 ${date} 简报`, 'info');
-    } catch (err) {
-      console.error(err);
-      showToast('切换历史简报失败，请稍后重试', 'error');
+    } catch {
+      setReport(MOCK_REPORT);
+      setIsUsingMock(true);
+      if (isManualRefresh) {
+        showToast('云端尚未生成首份简报，当前为演示数据', 'info');
+      }
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -146,13 +123,17 @@ export default function DailyBriefingPage() {
     let active = true;
     const initLoad = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/reports/latest`);
-        if (!res.ok) throw new Error('API 请求失败');
-        const data: DailyReport = await res.json();
+        const res = await fetch(`/data/briefings.json?t=${Date.now()}`);
+        if (!res.ok) throw new Error('尚未生成静态简报数据');
+        const data: Record<string, DailyReport> = await res.json();
+        const dates = Object.keys(data).sort().reverse();
+        if (dates.length === 0) throw new Error('简报归档为空');
+
         if (active) {
-          setReport(data);
+          setArchive(data);
+          setAvailableDates(dates);
+          setReport(data[dates[0]]);
           setIsUsingMock(false);
-          fetchAvailableDates();
         }
       } catch {
         if (active) {
@@ -169,28 +150,21 @@ export default function DailyBriefingPage() {
     };
   }, []);
 
-  const handleFeedbackSubmit = async (articleId: string, action: FeedbackAction) => {
-    if (isUsingMock) {
-      console.log(`[Mock 反馈] articleId=${articleId}, action=${action}`);
-      showToast('[演示模式] 已记录你的偏好反馈', 'info');
-      return;
+  const handleDateChange = (date: string) => {
+    const target = archive[date];
+    if (target) {
+      setReport(target);
+      setSelectedCategory('全部');
+      setSearchQuery('');
+      showToast(`已切换至 ${date} 简报`, 'info');
     }
+  };
 
-    try {
-      const res = await fetch(`${API_BASE}/api/feedback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ article_id: articleId, action }),
-      });
-      if (!res.ok) throw new Error('反馈提交失败');
-
-      if (action === 'like') {
-        showToast('已记录偏好，下次生成将优先推荐此类内容', 'success');
-      } else if (action === 'dislike') {
-        showToast('已记录反馈，后续将减少此类资讯推送', 'info');
-      }
-    } catch {
-      showToast('反馈提交失败，请检查后端服务', 'error');
+  const handleFeedbackSubmit = async (articleId: string, action: FeedbackAction) => {
+    if (action === 'like') {
+      showToast('已记录偏好，感谢反馈', 'success');
+    } else if (action === 'dislike') {
+      showToast('已记录反馈，后续将优化推荐', 'info');
     }
   };
 
@@ -285,16 +259,16 @@ export default function DailyBriefingPage() {
               </div>
             )}
 
-            {/* 手动刷新/生成按钮 */}
+            {/* 同步最新简报按钮 */}
             <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
+              onClick={() => loadStaticBriefings(true)}
+              disabled={isRefreshing}
               className="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-white shadow-xs hover:bg-stone-800 active:scale-[0.98] disabled:opacity-60 transition-all cursor-pointer"
             >
               <RefreshCw
-                className={`h-3.5 w-3.5 ${isGenerating ? 'animate-spin' : ''}`}
+                className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
               />
-              <span>{isGenerating ? '生成中...' : '更新简报'}</span>
+              <span>{isRefreshing ? '同步中...' : '刷新简报'}</span>
             </button>
           </div>
         </div>
@@ -320,7 +294,7 @@ export default function DailyBriefingPage() {
           </div>
         ) : !report ? (
           <div className="rounded-2xl border border-stone-200 bg-white p-12 text-center">
-            <p className="text-stone-500">暂无简报数据，请点击右上角「更新简报」。</p>
+            <p className="text-stone-500">暂无简报数据。</p>
           </div>
         ) : (
           <>
@@ -427,7 +401,7 @@ export default function DailyBriefingPage() {
                   <ArticleCard
                     key={article.id}
                     article={article}
-                onFeedbackSubmit={handleFeedbackSubmit}
+                    onFeedbackSubmit={handleFeedbackSubmit}
                   />
                 ))}
               </section>
