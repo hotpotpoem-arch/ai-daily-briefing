@@ -46,9 +46,20 @@ export default {
     const url = new URL(request.url);
 
     // 不是 /api/feedback 的请求，直接放行去加载正常的网页静态文件
-    if (url.pathname !== '/api/feedback') {
+    if (!url.pathname.startsWith('/api/feedback')) {
       return env.ASSETS.fetch(request);
     }
+
+    const isJson = url.searchParams.get('format') === 'json';
+    const respond = (ok, icon, title, desc, status = 200) => {
+      if (isJson) {
+        return new Response(JSON.stringify({ ok, title, desc }), {
+          status,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        });
+      }
+      return renderHtml(icon, title, desc);
+    };
 
     const action = url.searchParams.get('action');
     const title = url.searchParams.get('title');
@@ -57,7 +68,7 @@ export default {
     const tags = tagsStr ? tagsStr.split(',').filter(Boolean) : [];
 
     if (!action || !title || !['like', 'dislike'].includes(action)) {
-      return renderHtml('⚠️', '参数不完整', '无法识别你的反馈内容，请从简报中重新点击。');
+      return respond(false, '⚠️', '参数不完整', '无法识别你的反馈内容，请从简报中重新点击。', 400);
     }
 
     const token = env.GITHUB_TOKEN;
@@ -65,7 +76,7 @@ export default {
     const filePath = 'backend/preferences.json';
 
     if (!token) {
-      return renderHtml('⚙️', '尚未配置权限', '请在 Cloudflare Pages 后台添加 GITHUB_TOKEN 环境变量。');
+      return respond(false, '⚙️', '尚未配置权限', '请在 Cloudflare Pages 后台添加 GITHUB_TOKEN 环境变量。', 500);
     }
 
     const apiUrl = `https://api.github.com/repos/${repo}/contents/${filePath}`;
@@ -109,10 +120,10 @@ export default {
       if (!putRes.ok) throw new Error(`写入偏好文件失败 (${putRes.status})`);
 
       return action === 'like'
-        ? renderHtml('👍', '已记录：感兴趣', `已收藏《${title}》的偏好特征，明天 AI 将优先推荐类似主题。`)
-        : renderHtml('👎', '已记录：不感兴趣', `已记录反馈，后续 AI 将降低此类内容的推荐权重。`);
+        ? respond(true, '👍', '已记录：感兴趣', `已收藏《${title}》的偏好特征，明天 AI 将优先推荐类似主题。`)
+        : respond(true, '👎', '已记录：不感兴趣', `已记录反馈，后续 AI 将降低此类内容的推荐权重。`);
     } catch (err) {
-      return renderHtml('❌', '记录失败', `出错了：${err.message}`);
+      return respond(false, '❌', '记录失败', `出错了：${err.message}`, 500);
     }
   },
 };

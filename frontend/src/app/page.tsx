@@ -161,10 +161,63 @@ export default function DailyBriefingPage() {
   };
 
   const handleFeedbackSubmit = async (articleId: string, action: FeedbackAction) => {
-    if (action === 'like') {
-      showToast('已记录偏好，感谢反馈', 'success');
-    } else if (action === 'dislike') {
-      showToast('已记录反馈，后续将优化推荐', 'info');
+    if (!report) return;
+    const targetArticle = report.articles.find((a) => a.id === articleId);
+    if (!targetArticle) return;
+
+    // 如果取消点赞/踩，仅更新本地状态
+    if (action !== 'like' && action !== 'dislike') {
+      setReport((prev) =>
+        prev
+          ? {
+              ...prev,
+              articles: prev.articles.map((a) =>
+                a.id === articleId ? { ...a, userFeedback: null } : a
+              ),
+            }
+          : prev
+      );
+      return;
+    }
+
+    showToast('正在同步偏好到云端...', 'info');
+
+    try {
+      const params = new URLSearchParams({
+        action,
+        title: targetArticle.title,
+        category: targetArticle.category || 'AI',
+        tags: Array.isArray(targetArticle.tags) ? targetArticle.tags.join(',') : '',
+        format: 'json',
+      });
+
+      const res = await fetch(`/api/feedback?${params.toString()}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.desc || '同步失败');
+      }
+
+      // 同步更新当前页面的卡片反馈状态
+      setReport((prev) =>
+        prev
+          ? {
+              ...prev,
+              articles: prev.articles.map((a) =>
+                a.id === articleId ? { ...a, userFeedback: action } : a
+              ),
+            }
+          : prev
+      );
+
+      if (action === 'like') {
+        showToast('已同步至云端：感兴趣，明天将优先推荐同类主题', 'success');
+      } else {
+        showToast('已同步至云端：后续将降低此类内容权重', 'info');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '网络异常，请稍后重试';
+      showToast(`偏好记录失败：${message}`, 'error');
     }
   };
 
