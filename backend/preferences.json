@@ -1,6 +1,15 @@
 {
   "liked": [
     {
+      "title": "意识AI的神话",
+      "category": "论文速递",
+      "tags": [
+        "AI意识",
+        "哲学",
+        "伦理"
+      ]
+    },
+    {
       "title": "NousResearch/hermes-agent：与你共同成长的智能体",
       "category": "开源项目",
       "tags": [
