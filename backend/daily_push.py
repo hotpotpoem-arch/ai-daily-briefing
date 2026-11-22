@@ -1,13 +1,15 @@
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlencode
 
 import httpx
 from dotenv import load_dotenv
-
 from pipeline import generate_daily_briefing
 
 load_dotenv()
+
+SITE_URL = "https://ai-daily-briefing-543.pages.dev"
 
 
 def export_static_json(report: dict) -> None:
@@ -16,13 +18,11 @@ def export_static_json(report: dict) -> None:
     data_dir = project_root / "frontend" / "public" / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. 保存最新一份简报
     latest_path = data_dir / "latest.json"
     latest_path.write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    # 2. 按日期合并到历史归档 briefings.json（最新日期排在前面）
     archive_path = data_dir / "briefings.json"
     archive: dict = {}
     if archive_path.exists():
@@ -41,12 +41,26 @@ def export_static_json(report: dict) -> None:
     print(f"[导出成功] 静态数据已更新至 {archive_path}")
 
 
+def build_feedback_url(action: str, item: dict) -> str:
+    params = urlencode(
+        {
+            "action": action,
+            "title": item.get("title", ""),
+            "category": item.get("category", "AI"),
+            "tags": ",".join(item.get("tags", [])),
+        }
+    )
+    return f"{SITE_URL}/api/feedback?{params}"
+
+
 def format_markdown(report: dict) -> str:
-    """把 AI 简报格式化为适合微信阅读的 Markdown"""
+    """把 AI 简报格式化为适合微信阅读、带交互反馈按钮的 Markdown"""
     lines = [
         f"## 📅 AI 每日情报简报（{report.get('reportDate', '')}）",
         "",
         f"> **今日概览**：{report.get('overview', '')}",
+        "",
+        f"👉 [进入在线网页版（支持搜索与历史回看）]({SITE_URL})",
         "",
         "---",
         "",
@@ -55,12 +69,25 @@ def format_markdown(report: dict) -> str:
     for idx, item in enumerate(report.get("articles", []), start=1):
         title = item.get("title", "无标题")
         category = item.get("category", "AI")
-        summary = item.get("summary", "")
+        summary = item.get("tldr") or item.get("summary", "")
+        score = item.get("score")
         url = item.get("url", "")
-        lines.append(f"### {idx}. [{category}] {title}")
-        lines.append(f"{summary}")
+
+        score_text = f" · ⭐ {score}" if score else ""
+        lines.append(f"### {idx}. [{category}] {title}{score_text}")
+        if summary:
+            lines.append(f"{summary}")
+
+        like_url = build_feedback_url("like", item)
+        dislike_url = build_feedback_url("dislike", item)
+
+        actions = []
         if url:
-            lines.append(f"[查看原文]({url})")
+            actions.append(f"[📖 查看原文]({url})")
+        actions.append(f"[👍 感兴趣]({like_url})")
+        actions.append(f"[👎 不感兴趣]({dislike_url})")
+
+        lines.append(" ｜ ".join(actions))
         lines.append("")
 
     return "\n".join(lines)
