@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ExternalLink, ThumbsUp, ThumbsDown, Sparkles } from 'lucide-react';
+import { ExternalLink, ThumbsUp, ThumbsDown, Sparkles, BookOpen } from 'lucide-react';
 import { ArticleItem, FeedbackAction } from '@/types/briefing';
 
 interface ArticleCardProps {
@@ -33,6 +33,8 @@ export function ArticleCard({ article, onFeedbackSubmit }: ArticleCardProps) {
     }
   };
 
+  const cleanReadUrl = `https://r.jina.ai/${article.url}`;
+
   return (
     <article className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md">
       <div>
@@ -48,8 +50,6 @@ export function ArticleCard({ article, onFeedbackSubmit }: ArticleCardProps) {
         {/* 标题 */}
         <a
           href={article.url}
-          target="_blank"
-          rel="noopener noreferrer"
           className="mb-2 block text-base font-semibold leading-snug text-slate-900 transition-colors group-hover:text-indigo-600"
         >
           {article.title}
@@ -74,7 +74,7 @@ export function ArticleCard({ article, onFeedbackSubmit }: ArticleCardProps) {
           ))}
         </div>
 
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center justify-between gap-2 pt-1">
           {/* 点赞 / 点踩反馈按钮 */}
           <div className="flex items-center gap-1.5">
             <button
@@ -107,16 +107,25 @@ export function ArticleCard({ article, onFeedbackSubmit }: ArticleCardProps) {
             </button>
           </div>
 
-          {/* 查看原文 */}
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
-          >
-            查看原文
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+          {/* 纯享阅读 + 查看原文 */}
+          <div className="flex shrink-0 items-center gap-3">
+            <a
+              href={cleanReadUrl}
+              title="免登录提取纯文本正文"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition-colors hover:text-indigo-600"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>纯享</span>
+            </a>
+
+            <a
+              href={article.url}
+              className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 transition-colors hover:text-indigo-800"
+            >
+              <span>查看原文</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
         </div>
       </div>
     </article>
