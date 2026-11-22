@@ -1,20 +1,20 @@
 {
   "liked": [
     {
-      "title": "openclaw：跨平台AI智能体，真正能做事",
-      "category": "开源项目",
-      "tags": [
-        "AI Agent",
-        "跨平台",
-        "开源"
-      ]
-    },
-    {
       "title": "NousResearch/hermes-agent：与你共同成长的智能体",
       "category": "开源项目",
       "tags": [
         "AI Agent",
         "自适应",
+        "开源"
+      ]
+    },
+    {
+      "title": "openclaw：跨平台AI智能体，真正能做事",
+      "category": "开源项目",
+      "tags": [
+        "AI Agent",
+        "跨平台",
         "开源"
       ]
     }
