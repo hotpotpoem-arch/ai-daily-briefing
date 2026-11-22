@@ -1,0 +1,101 @@
+{
+  "reportDate": "2026-11-21",
+  "overview": "今日AI开源领域持续聚焦于AI Agent与工作流自动化，跨平台智能体与自适应Agent成为热点，同时知识检索与工作流平台也在加速整合AI能力。",
+  "stats": {
+    "scannedCount": 8,
+    "selectedCount": 6,
+    "durationSeconds": 12
+  },
+  "articles": [
+    {
+      "id": "ds_1121_001",
+      "category": "开源项目",
+      "title": "openclaw：跨平台AI智能体，真正能做事",
+      "tldr": "OpenClaw是一个跨平台AI智能体，支持任何操作系统，强调真正执行任务的能力。",
+      "tags": [
+        "AI Agent",
+        "跨平台",
+        "开源"
+      ],
+      "url": "https://github.com/openclaw/openclaw",
+      "sourceName": "GitHub Trending",
+      "score": 4.9,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1121_002",
+      "category": "开源项目",
+      "title": "NousResearch/hermes-agent：与你共同成长的智能体",
+      "tldr": "Hermes-Agent是一个自适应AI智能体，能够随着使用不断进化，与用户共同成长。",
+      "tags": [
+        "AI Agent",
+        "自适应",
+        "开源"
+      ],
+      "url": "https://github.com/NousResearch/hermes-agent",
+      "sourceName": "GitHub Trending",
+      "score": 4.8,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1121_003",
+      "category": "开源项目",
+      "title": "morluto/rea：用智能体逆向工程任何事物",
+      "tldr": "Rea利用AI智能体进行逆向工程，从应用行为到原生二进制文件均可分析。",
+      "tags": [
+        "AI Agent",
+        "逆向工程",
+        "开源"
+      ],
+      "url": "https://github.com/morluto/rea",
+      "sourceName": "GitHub Trending",
+      "score": 4.7,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1121_004",
+      "category": "开源项目",
+      "title": "n8n：原生AI能力的工作流自动化平台",
+      "tldr": "n8n是公平代码的工作流自动化平台，结合可视化构建与自定义代码，支持400+集成。",
+      "tags": [
+        "工作流自动化",
+        "AI",
+        "开源"
+      ],
+      "url": "https://github.com/n8n-io/n8n",
+      "sourceName": "GitHub Trending",
+      "score": 4.6,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1121_005",
+      "category": "开源项目",
+      "title": "firecrawl：让智能体更智能的知识基础设施",
+      "tldr": "Firecrawl提供搜索、抓取和访问550+数据提供商的统一API，增强智能体知识。",
+      "tags": [
+        "知识检索",
+        "API",
+        "开源"
+      ],
+      "url": "https://github.com/firecrawl/firecrawl",
+      "sourceName": "GitHub Trending",
+      "score": 4.5,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1121_006",
+      "category": "开源项目",
+      "title": "dify：构建智能体工作流与RAG管道的一站式平台",
+      "tldr": "Dify支持在协作工作区中构建Agentic工作流和RAG管道，支持云、VPC或自托管部署。",
+      "tags": [
+        "AI工作流",
+        "RAG",
+        "开源"
+      ],
+      "url": "https://github.com/langgenius/dify",
+      "sourceName": "GitHub Trending",
+      "score": 4.4,
+      "userFeedback": null
+    }
+  ]
+}

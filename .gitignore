@@ -1,0 +1,12 @@
+# 敏感密钥（绝对不能上传）
+.env
+backend/.env
+
+# 依赖与缓存
+backend/venv/
+backend/__pycache__/
+frontend/node_modules/
+frontend/.next/
+
+# 本地数据库（可选，避免冲突）
+backend/briefings.db
