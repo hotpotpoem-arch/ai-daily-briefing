@@ -1,15 +1,6 @@
 {
   "liked": [
     {
-      "title": "firecrawl：让智能体更聪明的知识基础设施",
-      "category": "开源项目",
-      "tags": [
-        "AI Agent",
-        "数据抓取",
-        "知识库"
-      ]
-    },
-    {
       "title": "意识AI的神话",
       "category": "论文速递",
       "tags": [
@@ -37,5 +28,15 @@
       ]
     }
   ],
-  "disliked": []
+  "disliked": [
+    {
+      "title": "firecrawl：让智能体更聪明的知识基础设施",
+      "category": "开源项目",
+      "tags": [
+        "AI Agent",
+        "数据抓取",
+        "知识库"
+      ]
+    }
+  ]
 }
