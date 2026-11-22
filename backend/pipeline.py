@@ -3,6 +3,7 @@ import os
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 import feedparser
 import httpx
@@ -11,6 +12,38 @@ from openai import OpenAI
 
 load_dotenv()
 PREF_FILE = Path(__file__).parent / "preferences.json"
+
+# 过滤掉需要注册登录、付费墙或国内极难打开的站点
+BLOCKED_DOMAINS = {
+    "nytimes.com",
+    "wsj.com",
+    "bloomberg.com",
+    "ft.com",
+    "economist.com",
+    "washingtonpost.com",
+    "businessinsider.com",
+    "theinformation.com",
+    "medium.com",
+    "substack.com",
+    "x.com",
+    "twitter.com",
+    "linkedin.com",
+    "wired.com",
+    "theatlantic.com",
+    "newyorker.com",
+    "noemamag.com",
+}
+
+
+def is_blocked_url(url: str) -> bool:
+    """判断链接是否属于黑名单域名（含子域名）"""
+    if not url:
+        return True
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:  # noqa: BLE001
+        return True
+    return any(host == d or host.endswith(f".{d}") for d in BLOCKED_DOMAINS)
 
 
 def build_preference_prompt() -> str:
@@ -42,22 +75,31 @@ def build_preference_prompt() -> str:
 
     return "\n".join(lines)
 
+
 def fetch_raw_articles() -> list[dict]:
     """从 Hacker News、arXiv、GitHub 抓取最新 AI 资讯"""
     items: list[dict] = []
 
-    # 1. Hacker News AI 热门讨论 (RSS)
+    # 1. Hacker News AI 热门讨论 (RSS，自动过滤登录墙/付费墙域名)
     try:
         hn_feed = feedparser.parse("https://hnrss.org/frontpage?q=AI+OR+LLM+OR+Agent")
-        for entry in hn_feed.entries[:10]:
+        hn_count = 0
+        for entry in hn_feed.entries:
+            url = entry.get("link", "")
+            if is_blocked_url(url):
+                print(f"[HN 过滤黑名单域名] {url}")
+                continue
             items.append(
                 {
                     "title": entry.get("title", ""),
                     "summary": entry.get("summary", "")[:300],
-                    "url": entry.get("link", ""),
+                    "url": url,
                     "sourceName": "Hacker News",
                 }
             )
+            hn_count += 1
+            if hn_count >= 10:
+                break
     except Exception as e:  # noqa: BLE001
         print(f"[HN 抓取跳过] {e}")
 
