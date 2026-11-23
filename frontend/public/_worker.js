@@ -327,7 +327,7 @@ export default {
             .replace(/<(script|style|noscript|iframe|svg|nav|header|footer|aside|form|button)[^>]*>[\s\S]*?<\/\1>/gi, '')
             .replace(/<!--[\s\S]*?-->/g, '')
             .replace(/<(p|div|h[1-6]|li|blockquote|br)[^>]*>/gi, '\n<$1>')
-            .replace(/<(?!\/?(p|h[1-6]|strong|b|em|i|ul|ol|li|blockquote|pre|code|br|a)\b)[^>]+>/gi, '')
+            .replace(/<(?!\/?(p|h[1-6]|strong|b|em|i|ul|ol|li|blockquote|pre|code|br|a|img)\b)[^>]+>/gi, '')
             .replace(/\s+on\w+="[^"]*"/gi, '')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
@@ -342,6 +342,13 @@ export default {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>${escapeHtml(title)} - 纯享阅读</title>
   <style>
+    article img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    border-radius: 8px;
+    }
     html, body {
       -webkit-text-size-adjust: 100% !important;
       text-size-adjust: 100% !important;
@@ -607,7 +614,7 @@ export default {
         });
       } catch (err) {
         return new Response(
-          `<html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px;line-height:1.6;"><h3>纯享解析失败</h3><p>${escapeHtml(err.message)}</p><p><a href="${escapeHtml(targetUrl)}">点击直接查看原文 ↗</a></p></body></html>`,
+          `<html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px;line-height:1.6;"><h3>纯享解析失败</h3><p>${escapeHtml(err.message)}</p><p></p></body></html>`,
           { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
       }
