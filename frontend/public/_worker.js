@@ -391,20 +391,20 @@ export default {
       cursor: pointer;
     }
     article {
-      font-size: 16px;
+      font-size: 12px;
       line-height: 1.8;
       letter-spacing: 0.02em;
       word-break: break-word;
     }
     article h1 {
-      font-size: 21px;
+      font-size: 16px;
       line-height: 1.4;
       font-weight: 700;
       margin: 8px 0 20px;
       color: #111827;
     }
     article h2 {
-      font-size: 18px;
+      font-size: 16px;
       line-height: 1.45;
       font-weight: 600;
       margin: 28px 0 12px;
@@ -413,13 +413,13 @@ export default {
       color: #111827;
     }
     article h3 {
-      font-size: 16px;
+      font-size: 12px;
       font-weight: 600;
       margin: 22px 0 8px;
       color: #374151;
     }
     article p {
-      margin: 0 0 16px;
+      margin: 0 0 14px;
       text-align: justify;
     }
     article ul, article ol {
