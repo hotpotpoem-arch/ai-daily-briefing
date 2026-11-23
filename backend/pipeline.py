@@ -1,7 +1,8 @@
 import json
 import os
+import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -13,7 +14,7 @@ from openai import OpenAI
 load_dotenv()
 PREF_FILE = Path(__file__).parent / "preferences.json"
 
-# 过滤掉需要注册登录、付费墙或国内极难打开的站点
+# 过滤掉需要注册登录、付费墙或极难打开的站点
 BLOCKED_DOMAINS = {
     "nytimes.com",
     "wsj.com",
@@ -34,6 +35,17 @@ BLOCKED_DOMAINS = {
     "noemamag.com",
 }
 
+# 前沿 AI 图文深度资讯源（官方博客 + 头部科技深度媒体）
+RSS_SOURCES = [
+    ("OpenAI News", "https://openai.com/news/rss.xml", 4),
+    ("Google DeepMind", "https://deepmind.google/blog/rss.xml", 4),
+    ("Hugging Face Blog", "https://huggingface.co/blog/feed.xml", 4),
+    ("MIT Tech Review AI", "https://www.technologyreview.com/topic/artificial-intelligence/feed", 5),
+    ("The Verge AI", "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", 5),
+    ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", 5),
+    ("VentureBeat AI", "https://venturebeat.com/category/ai/feed/", 5),
+]
+
 
 def is_blocked_url(url: str) -> bool:
     """判断链接是否属于黑名单域名（含子域名）"""
@@ -44,6 +56,14 @@ def is_blocked_url(url: str) -> bool:
     except Exception:  # noqa: BLE001
         return True
     return any(host == d or host.endswith(f".{d}") for d in BLOCKED_DOMAINS)
+
+
+def clean_html(text: str) -> str:
+    """去除 RSS 摘要中的 HTML 标签，保留纯文本供大模型判断深度"""
+    if not text:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def build_preference_prompt() -> str:
@@ -77,71 +97,45 @@ def build_preference_prompt() -> str:
 
 
 def fetch_raw_articles() -> list[dict]:
-    """从 Hacker News、arXiv、GitHub 抓取最新 AI 资讯"""
+    """从前沿 AI 官方博客与头部科技媒体抓取深度图文资讯"""
     items: list[dict] = []
-
-    # 1. Hacker News AI 热门讨论 (RSS，自动过滤登录墙/付费墙域名)
-    try:
-        hn_feed = feedparser.parse("https://hnrss.org/frontpage?q=AI+OR+LLM+OR+Agent")
-        hn_count = 0
-        for entry in hn_feed.entries:
-            url = entry.get("link", "")
-            if is_blocked_url(url):
-                print(f"[HN 过滤黑名单域名] {url}")
-                continue
-            items.append(
-                {
-                    "title": entry.get("title", ""),
-                    "summary": entry.get("summary", "")[:300],
-                    "url": url,
-                    "sourceName": "Hacker News",
-                }
-            )
-            hn_count += 1
-            if hn_count >= 10:
-                break
-    except Exception as e:  # noqa: BLE001
-        print(f"[HN 抓取跳过] {e}")
-
-    # 2. arXiv cs.AI 最新论文 (RSS)
-    try:
-        arxiv_feed = feedparser.parse("https://rss.arxiv.org/rss/cs.AI")
-        for entry in arxiv_feed.entries[:10]:
-            items.append(
-                {
-                    "title": entry.get("title", ""),
-                    "summary": entry.get("summary", "")[:300],
-                    "url": entry.get("link", ""),
-                    "sourceName": "arXiv cs.AI",
-                }
-            )
-    except Exception as e:  # noqa: BLE001
-        print(f"[arXiv 抓取跳过] {e}")
-
-    # 3. GitHub 近 7 天高星 AI 开源项目 (公开 API)
-    try:
-        since_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-        gh_url = (
-            f"https://api.github.com/search/repositories"
-            f"?q=topic:ai+pushed:>{since_date}&sort=stars&order=desc&per_page=8"
+    seen_urls: set[str] = set()
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
-        resp = httpx.get(
-            gh_url,
-            headers={"Accept": "application/vnd.github+json"},
-            timeout=15.0,
-        )
-        if resp.status_code == 200:
-            for repo in resp.json().get("items", []):
-                items.append(
-                    {
-                        "title": f"{repo['full_name']} (⭐{repo['stargazers_count']})",
-                        "summary": (repo.get("description") or "暂无简介")[:300],
-                        "url": repo["html_url"],
-                        "sourceName": "GitHub Trending",
-                    }
-                )
-    except Exception as e:  # noqa: BLE001
-        print(f"[GitHub 抓取跳过] {e}")
+    }
+
+    with httpx.Client(headers=headers, timeout=15.0, follow_redirects=True) as http:
+        for source_name, rss_url, limit in RSS_SOURCES:
+            try:
+                resp = http.get(rss_url)
+                resp.raise_for_status()
+                feed = feedparser.parse(resp.text)
+
+                count = 0
+                for entry in feed.entries:
+                    url = entry.get("link", "").strip()
+                    if not url or url in seen_urls or is_blocked_url(url):
+                        continue
+
+                    summary_raw = entry.get("summary") or entry.get("description") or ""
+                    items.append(
+                        {
+                            "title": entry.get("title", "").strip(),
+                            "summary": clean_html(summary_raw)[:400],
+                            "url": url,
+                            "sourceName": source_name,
+                        }
+                    )
+                    seen_urls.add(url)
+                    count += 1
+                    if count >= limit:
+                        break
+                print(f"[抓取成功] {source_name}: {count} 篇")
+            except Exception as e:  # noqa: BLE001
+                print(f"[抓取跳过] {source_name}: {e}")
 
     return items
 
@@ -163,16 +157,19 @@ def generate_daily_briefing() -> dict:
         base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com"),
     )
 
-    system_prompt = """你是一位资深 AI 行业情报分析师。
-请从用户提供的原始资讯列表中，筛选出最有价值的 6 条内容，并严格按照以下 JSON 格式输出（不要包含 Markdown 代码块之外的多余文字）：
+    system_prompt = """你是一位资深 AI 行业情报主编，专门为读者策划高质量的「前沿 AI 深度图文日报」。
+请从用户提供的原始资讯列表中，精选出最有价值的 6 篇文章，严格遵循以下筛选标准：
+1. 优先选择：前沿大模型发布、AI Agent / 多模态 / 具身智能重大突破、官方技术博客深度解读、行业重磅长文报道（内容详实、适合图文深度阅读）。
+2. 尽量过滤：简短快讯、纯公关软文、无实质技术或商业洞察的水文、以及同质化重复报道（同一事件只保留最深度的一篇）。
+3. 严格按照以下 JSON 格式输出（不要包含 Markdown 代码块之外的多余文字）：
 {
-  "overview": "用 2-3 句中文总结今日 AI 领域的核心趋势",
+  "overview": "用 2-3 句中文精炼总结今日 AI 领域最核心的前沿动态与趋势",
   "articles": [
     {
       "id": "art_001",
-      "category": "开源项目 | 论文速递 | 行业动态（三选一）",
-      "title": "精炼的中文标题",
-      "tldr": "60字以内的中文核心要点总结",
+      "category": "前沿发布 | 深度解读 | 行业动态（三选一）",
+      "title": "吸引人且准确的中文标题",
+      "tldr": "60-80字中文核心要点，提炼文章最关键的技术细节或行业影响",
       "tags": ["标签1", "标签2", "标签3"],
       "url": "必须原样保留原始链接，严禁编造",
       "sourceName": "原样保留来源名称",
