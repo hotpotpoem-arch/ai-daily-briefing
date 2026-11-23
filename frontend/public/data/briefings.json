@@ -1,4 +1,105 @@
 {
+  "2026-11-23": {
+    "reportDate": "2026-11-23",
+    "overview": "今日AI领域聚焦于智能体（Agent）的实用化与开源生态繁荣，多个高星项目如openclaw、hermes-agent等强调跨平台、自适应能力；同时，本地AI部署与安全课程受到关注，体现社区对可及性与安全性的双重重视。",
+    "stats": {
+      "scannedCount": 12,
+      "selectedCount": 6,
+      "durationSeconds": 14
+    },
+    "articles": [
+      {
+        "id": "ds_1123_001",
+        "category": "开源项目",
+        "title": "openclaw：跨平台AI智能体，真正能做事",
+        "tldr": "openclaw是一个跨平台AI智能体，支持任何操作系统，旨在真正执行任务，以“龙虾方式”为特色。",
+        "tags": [
+          "AI Agent",
+          "跨平台",
+          "开源"
+        ],
+        "url": "https://github.com/openclaw/openclaw",
+        "sourceName": "GitHub Trending",
+        "score": 4.9,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_002",
+        "category": "开源项目",
+        "title": "NousResearch/hermes-agent：与你共同成长的智能体",
+        "tldr": "hermes-agent是一个自适应AI智能体，能够随着用户需求不断进化成长。",
+        "tags": [
+          "AI Agent",
+          "自适应",
+          "开源"
+        ],
+        "url": "https://github.com/NousResearch/hermes-agent",
+        "sourceName": "GitHub Trending",
+        "score": 4.8,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_003",
+        "category": "开源项目",
+        "title": "n8n：原生AI能力的工作流自动化平台",
+        "tldr": "n8n是公平代码的工作流自动化平台，原生集成AI能力，支持可视化构建与自定义代码，提供400+集成。",
+        "tags": [
+          "工作流自动化",
+          "AI集成",
+          "开源"
+        ],
+        "url": "https://github.com/n8n-io/n8n",
+        "sourceName": "GitHub Trending",
+        "score": 4.7,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_004",
+        "category": "开源项目",
+        "title": "firecrawl：让智能体更聪明的知识基础设施",
+        "tldr": "firecrawl提供知识基础设施，通过单一API搜索、抓取和访问550+数据提供商，提升智能体智能。",
+        "tags": [
+          "AI Agent",
+          "数据抓取",
+          "知识库"
+        ],
+        "url": "https://github.com/firecrawl/firecrawl",
+        "sourceName": "GitHub Trending",
+        "score": 4.6,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_005",
+        "category": "行业动态",
+        "title": "哈佛CS 2881R AI安全课程",
+        "tldr": "哈佛大学开设CS 2881R AI安全课程，提供相关教学资源与研讨会信息。",
+        "tags": [
+          "AI安全",
+          "教育",
+          "课程"
+        ],
+        "url": "https://boazbk.github.io/mltheoryseminar/",
+        "sourceName": "Hacker News",
+        "score": 4.5,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_006",
+        "category": "行业动态",
+        "title": "本地AI入门指南：Inkling、Qwen与Unsloth",
+        "tldr": "一篇面向初学者的本地AI部署指南，介绍Inkling、Qwen和Unsloth工具的使用。",
+        "tags": [
+          "本地AI",
+          "入门",
+          "工具"
+        ],
+        "url": "https://www.gpupartner.com/blog/beginners-guide-local-ai-inkling-qwen-unsloth",
+        "sourceName": "Hacker News",
+        "score": 4.4,
+        "userFeedback": null
+      }
+    ]
+  },
   "2026-11-22": {
     "reportDate": "2026-11-22",
     "overview": "今日AI领域聚焦于智能体（Agent）的实用化与生态建设，开源项目持续推动跨平台、自适应智能体发展，同时欧洲官方法律框架为AI监管提供新范式。",

@@ -1,32 +1,17 @@
 {
-  "reportDate": "2026-11-22",
-  "overview": "今日AI领域聚焦于智能体（Agent）的实用化与生态建设，开源项目持续推动跨平台、自适应智能体发展，同时欧洲官方法律框架为AI监管提供新范式。",
+  "reportDate": "2026-11-23",
+  "overview": "今日AI领域聚焦于智能体（Agent）的实用化与开源生态繁荣，多个高星项目如openclaw、hermes-agent等强调跨平台、自适应能力；同时，本地AI部署与安全课程受到关注，体现社区对可及性与安全性的双重重视。",
   "stats": {
-    "scannedCount": 9,
+    "scannedCount": 12,
     "selectedCount": 6,
-    "durationSeconds": 36
+    "durationSeconds": 14
   },
   "articles": [
     {
-      "id": "ds_1122_001",
-      "category": "行业动态",
-      "title": "Pandex：面向AI智能体的欧洲官方法律框架，基于MCP",
-      "tldr": "欧洲推出Pandex法律框架，通过MCP协议规范AI智能体，引发Hacker News热议。",
-      "tags": [
-        "AI监管",
-        "法律框架",
-        "MCP"
-      ],
-      "url": "https://www.pandex.io",
-      "sourceName": "Hacker News",
-      "score": 4.9,
-      "userFeedback": null
-    },
-    {
-      "id": "ds_1122_002",
+      "id": "ds_1123_001",
       "category": "开源项目",
       "title": "openclaw：跨平台AI智能体，真正能做事",
-      "tldr": "openclaw是跨平台AI智能体，支持任何操作系统，强调实际执行能力，GitHub星标超39万。",
+      "tldr": "openclaw是一个跨平台AI智能体，支持任何操作系统，旨在真正执行任务，以“龙虾方式”为特色。",
       "tags": [
         "AI Agent",
         "跨平台",
@@ -34,14 +19,29 @@
       ],
       "url": "https://github.com/openclaw/openclaw",
       "sourceName": "GitHub Trending",
+      "score": 4.9,
+      "userFeedback": null
+    },
+    {
+      "id": "ds_1123_002",
+      "category": "开源项目",
+      "title": "NousResearch/hermes-agent：与你共同成长的智能体",
+      "tldr": "hermes-agent是一个自适应AI智能体，能够随着用户需求不断进化成长。",
+      "tags": [
+        "AI Agent",
+        "自适应",
+        "开源"
+      ],
+      "url": "https://github.com/NousResearch/hermes-agent",
+      "sourceName": "GitHub Trending",
       "score": 4.8,
       "userFeedback": null
     },
     {
-      "id": "ds_1122_003",
+      "id": "ds_1123_003",
       "category": "开源项目",
       "title": "n8n：原生AI能力的工作流自动化平台",
-      "tldr": "n8n是公平代码工作流自动化平台，原生集成AI，支持可视化构建与自定义代码，400+集成。",
+      "tldr": "n8n是公平代码的工作流自动化平台，原生集成AI能力，支持可视化构建与自定义代码，提供400+集成。",
       "tags": [
         "工作流自动化",
         "AI集成",
@@ -53,10 +53,10 @@
       "userFeedback": null
     },
     {
-      "id": "ds_1122_004",
+      "id": "ds_1123_004",
       "category": "开源项目",
       "title": "firecrawl：让智能体更聪明的知识基础设施",
-      "tldr": "firecrawl提供搜索、抓取和访问550+数据提供商的统一API，增强智能体知识能力。",
+      "tldr": "firecrawl提供知识基础设施，通过单一API搜索、抓取和访问550+数据提供商，提升智能体智能。",
       "tags": [
         "AI Agent",
         "数据抓取",
@@ -68,32 +68,32 @@
       "userFeedback": null
     },
     {
-      "id": "ds_1122_005",
-      "category": "开源项目",
-      "title": "NousResearch/hermes-agent：与你共同成长的智能体",
-      "tldr": "hermes-agent是自适应AI智能体，能够随用户需求成长，GitHub星标超26万。",
+      "id": "ds_1123_005",
+      "category": "行业动态",
+      "title": "哈佛CS 2881R AI安全课程",
+      "tldr": "哈佛大学开设CS 2881R AI安全课程，提供相关教学资源与研讨会信息。",
       "tags": [
-        "AI Agent",
-        "自适应",
-        "开源"
+        "AI安全",
+        "教育",
+        "课程"
       ],
-      "url": "https://github.com/NousResearch/hermes-agent",
-      "sourceName": "GitHub Trending",
+      "url": "https://boazbk.github.io/mltheoryseminar/",
+      "sourceName": "Hacker News",
       "score": 4.5,
       "userFeedback": null
     },
     {
-      "id": "ds_1122_006",
-      "category": "开源项目",
-      "title": "langgenius/dify：构建智能体工作流与RAG管道的一站式平台",
-      "tldr": "dify支持在协作工作区中构建智能体工作流和RAG管道，集成丰富AI模型与工具，可云端或自托管部署。",
+      "id": "ds_1123_006",
+      "category": "行业动态",
+      "title": "本地AI入门指南：Inkling、Qwen与Unsloth",
+      "tldr": "一篇面向初学者的本地AI部署指南，介绍Inkling、Qwen和Unsloth工具的使用。",
       "tags": [
-        "智能体工作流",
-        "RAG",
-        "开源"
+        "本地AI",
+        "入门",
+        "工具"
       ],
-      "url": "https://github.com/langgenius/dify",
-      "sourceName": "GitHub Trending",
+      "url": "https://www.gpupartner.com/blog/beginners-guide-local-ai-inkling-qwen-unsloth",
+      "sourceName": "Hacker News",
       "score": 4.4,
       "userFeedback": null
     }
