@@ -1,17 +1,17 @@
 {
   "reportDate": "2026-11-23",
-  "overview": "今日AI领域呈现两大趋势：一是智能体（Agent）能力持续深化，从工具调用、自我改进到多智能体协作均有新进展；二是开源生态活跃，跨平台智能体、工作流自动化与知识基础设施项目受到高度关注。",
+  "overview": "今日AI领域呈现两大趋势：一是开源AI智能体生态持续繁荣，openclaw、hermes-agent、n8n等工具强调跨平台执行与自适应能力；二是学术研究聚焦智能体协作效率、工具调用数据集与自改进基准，推动AI从单点能力向系统化、可评估方向演进。",
   "stats": {
     "scannedCount": 18,
     "selectedCount": 6,
-    "durationSeconds": 4
+    "durationSeconds": 140
   },
   "articles": [
     {
       "id": "ds_1123_001",
       "category": "开源项目",
       "title": "openclaw：跨平台AI智能体，真正能做事",
-      "tldr": "openclaw是一个跨平台AI智能体，支持任意操作系统与平台，强调实际执行能力，以“龙虾方式”为特色。",
+      "tldr": "openclaw是一个跨平台AI智能体，支持任意操作系统与平台，强调实际执行能力，GitHub星标近40万。",
       "tags": [
         "AI Agent",
         "跨平台",
@@ -26,7 +26,7 @@
       "id": "ds_1123_002",
       "category": "开源项目",
       "title": "NousResearch/hermes-agent：与你共同成长的智能体",
-      "tldr": "hermes-agent是一个自适应AI智能体，能够随着使用不断成长，强调个性化与持续学习能力。",
+      "tldr": "hermes-agent是一个自适应AI智能体，能够随用户使用不断进化成长，GitHub星标超26万。",
       "tags": [
         "AI Agent",
         "自适应",
@@ -41,7 +41,7 @@
       "id": "ds_1123_003",
       "category": "开源项目",
       "title": "n8n：原生AI能力的工作流自动化平台",
-      "tldr": "n8n是公平代码工作流自动化平台，原生集成AI能力，支持可视化构建与自定义代码，提供400+集成。",
+      "tldr": "n8n是公平代码工作流自动化平台，原生集成AI能力，支持可视化构建与自定义代码，400+集成。",
       "tags": [
         "工作流自动化",
         "AI集成",
@@ -56,7 +56,7 @@
       "id": "ds_1123_004",
       "category": "开源项目",
       "title": "firecrawl：让智能体更聪明的知识基础设施",
-      "tldr": "firecrawl提供知识基础设施，通过统一API搜索、抓取并访问550+数据提供商，提升智能体知识获取能力。",
+      "tldr": "firecrawl提供搜索、抓取与访问550+数据提供商的统一API，为AI智能体构建知识基础设施。",
       "tags": [
         "AI Agent",
         "数据抓取",
@@ -70,11 +70,11 @@
     {
       "id": "ds_1123_005",
       "category": "论文速递",
-      "title": "AstronautBench：衡量智能体跨回合自我改进能力",
-      "tldr": "提出AstronautBench基准，从知识、证据和进展三个维度评估LLM智能体在固定权重下跨回合的自我改进能力。",
+      "title": "AstronautBench：衡量智能体跨回合自改进能力",
+      "tldr": "提出AstronautBench基准，从知识、证据与进展三个维度评估LLM智能体在固定权重下的跨回合自改进能力。",
       "tags": [
         "AI Agent",
-        "自我改进",
+        "自改进",
         "基准测试"
       ],
       "url": "https://arxiv.org/abs/2611.26910",
@@ -86,7 +86,7 @@
       "id": "ds_1123_006",
       "category": "论文速递",
       "title": "TOUMAII：450万对工具调用偏好数据集及生成器",
-      "tldr": "构建450万对工具调用偏好数据集TOUMAII，并提供源无关生成器，助力企业智能体可靠调用工具与API。",
+      "tldr": "发布450万对工具调用偏好数据集TOUMAII及源无关生成器，助力企业智能体可靠调用API与数据库。",
       "tags": [
         "工具调用",
         "偏好数据集",
