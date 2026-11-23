@@ -2,7 +2,7 @@ name: Daily AI Briefing
 
 on:
   schedule:
-    - cron: '45 3 * * *'   # 每天北京时间 10:05（UTC 02:05）
+    - cron: '5 4 * * *'   # 每天北京时间 10:05（UTC 02:05）
   workflow_dispatch:
 
 permissions:
