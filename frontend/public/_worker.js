@@ -478,28 +478,25 @@ export default {
       }
     })();
 
-    // 2. 完整 Markdown 渲染 + 自动 AI 翻译
-    (async function() {
+    // 2. 完整 Markdown 渲染 + 自动/手动 AI 翻译
+    (function() {
       const origEl = document.getElementById('orig-content');
       const zhEl = document.getElementById('zh-content');
       const bar = document.getElementById('trans-bar');
       const statusEl = document.getElementById('trans-status');
       const toggleBtn = document.getElementById('toggle-btn');
 
-      // 清理原文里多余的空行和极短噪音块
       const plainText = (origEl.innerText || '').replace(/\\n{3,}/g, '\\n\\n').trim();
       if (!plainText) return;
 
-      const cnChars = (plainText.match(/[\\u4e00-\\u9fa5]/g) || []).length;
-      if (cnChars / plainText.length > 0.25) return;
-
+      // 始终显示翻译栏，确保随时可手动触发
       bar.style.display = 'flex';
 
       function renderMarkdown(md) {
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const inline = (s) => esc(s)
           .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-          .replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+          .replace(/\\x60([^\\x60]+)\\x60/g, '<code>$1</code>');
 
         const lines = md.split(/\\r?\\n/);
         let html = '';
@@ -544,30 +541,58 @@ export default {
         return html;
       }
 
-      try {
-        const res = await fetch('/api/translate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: plainText })
-        });
-        const data = await res.json();
-        if (!res.ok || !data.translated) throw new Error(data.error || '翻译失败');
+      let isTranslated = false;
+      let showingZh = false;
 
-        zhEl.innerHTML = renderMarkdown(data.translated);
-        origEl.style.display = 'none';
-        zhEl.style.display = 'block';
-        statusEl.textContent = '已由 AI 精准翻译为中文';
+      async function runTranslate() {
+        statusEl.textContent = '正在 AI 精准翻译为中文...';
+        toggleBtn.style.display = 'none';
+        try {
+          const res = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: plainText })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.translated) throw new Error(data.error || '翻译失败');
+
+          zhEl.innerHTML = renderMarkdown(data.translated);
+          origEl.style.display = 'none';
+          zhEl.style.display = 'block';
+          isTranslated = true;
+          showingZh = true;
+          statusEl.textContent = '已由 AI 精准翻译为中文';
+          toggleBtn.textContent = '切换原文';
+          toggleBtn.style.display = 'inline-block';
+        } catch (e) {
+          statusEl.textContent = '翻译失败：' + e.message;
+          toggleBtn.textContent = '重试翻译';
+          toggleBtn.style.display = 'inline-block';
+        }
+      }
+
+      toggleBtn.onclick = () => {
+        if (!isTranslated) {
+          runTranslate();
+          return;
+        }
+        showingZh = !showingZh;
+        zhEl.style.display = showingZh ? 'block' : 'none';
+        origEl.style.display = showingZh ? 'none' : 'block';
+        toggleBtn.textContent = showingZh ? '切换原文' : '查看译文';
+      };
+
+      // 更准确的英文判定：统计英文字母数 vs 中文字符数
+      const cnChars = (plainText.match(/[\\u4e00-\\u9fa5]/g) || []).length;
+      const enChars = (plainText.match(/[a-zA-Z]/g) || []).length;
+
+      // 只要英文字母明显多于中文（英文内容为主），就自动翻译
+      if (enChars > cnChars * 2) {
+        runTranslate();
+      } else {
+        statusEl.textContent = '当前为原文视图';
+        toggleBtn.textContent = 'AI 翻译中文';
         toggleBtn.style.display = 'inline-block';
-
-        let showingZh = true;
-        toggleBtn.onclick = () => {
-          showingZh = !showingZh;
-          zhEl.style.display = showingZh ? 'block' : 'none';
-          origEl.style.display = showingZh ? 'none' : 'block';
-          toggleBtn.textContent = showingZh ? '切换原文' : '查看译文';
-        };
-      } catch (e) {
-        statusEl.textContent = '自动翻译失败：' + e.message;
       }
     })();
   </script>
@@ -577,7 +602,7 @@ export default {
         return new Response(pageHtml, {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'public, max-age=3600'
+            'Cache-Control': 'no-cache'
           }
         });
       } catch (err) {
