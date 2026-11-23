@@ -1,17 +1,17 @@
 {
   "reportDate": "2026-11-23",
-  "overview": "今日AI领域聚焦于智能体（Agent）的实用化与开源生态繁荣，多个高星项目如openclaw、hermes-agent等强调跨平台、自适应能力；同时，本地AI部署与安全课程受到关注，体现社区对可及性与安全性的双重重视。",
+  "overview": "今日AI领域呈现两大趋势：一是智能体（Agent）能力持续深化，从工具调用、自我改进到多智能体协作均有新进展；二是开源生态活跃，跨平台智能体、工作流自动化与知识基础设施项目受到高度关注。",
   "stats": {
-    "scannedCount": 12,
+    "scannedCount": 18,
     "selectedCount": 6,
-    "durationSeconds": 14
+    "durationSeconds": 4
   },
   "articles": [
     {
       "id": "ds_1123_001",
       "category": "开源项目",
       "title": "openclaw：跨平台AI智能体，真正能做事",
-      "tldr": "openclaw是一个跨平台AI智能体，支持任何操作系统，旨在真正执行任务，以“龙虾方式”为特色。",
+      "tldr": "openclaw是一个跨平台AI智能体，支持任意操作系统与平台，强调实际执行能力，以“龙虾方式”为特色。",
       "tags": [
         "AI Agent",
         "跨平台",
@@ -26,7 +26,7 @@
       "id": "ds_1123_002",
       "category": "开源项目",
       "title": "NousResearch/hermes-agent：与你共同成长的智能体",
-      "tldr": "hermes-agent是一个自适应AI智能体，能够随着用户需求不断进化成长。",
+      "tldr": "hermes-agent是一个自适应AI智能体，能够随着使用不断成长，强调个性化与持续学习能力。",
       "tags": [
         "AI Agent",
         "自适应",
@@ -41,7 +41,7 @@
       "id": "ds_1123_003",
       "category": "开源项目",
       "title": "n8n：原生AI能力的工作流自动化平台",
-      "tldr": "n8n是公平代码的工作流自动化平台，原生集成AI能力，支持可视化构建与自定义代码，提供400+集成。",
+      "tldr": "n8n是公平代码工作流自动化平台，原生集成AI能力，支持可视化构建与自定义代码，提供400+集成。",
       "tags": [
         "工作流自动化",
         "AI集成",
@@ -56,7 +56,7 @@
       "id": "ds_1123_004",
       "category": "开源项目",
       "title": "firecrawl：让智能体更聪明的知识基础设施",
-      "tldr": "firecrawl提供知识基础设施，通过单一API搜索、抓取和访问550+数据提供商，提升智能体智能。",
+      "tldr": "firecrawl提供知识基础设施，通过统一API搜索、抓取并访问550+数据提供商，提升智能体知识获取能力。",
       "tags": [
         "AI Agent",
         "数据抓取",
@@ -69,31 +69,31 @@
     },
     {
       "id": "ds_1123_005",
-      "category": "行业动态",
-      "title": "哈佛CS 2881R AI安全课程",
-      "tldr": "哈佛大学开设CS 2881R AI安全课程，提供相关教学资源与研讨会信息。",
+      "category": "论文速递",
+      "title": "AstronautBench：衡量智能体跨回合自我改进能力",
+      "tldr": "提出AstronautBench基准，从知识、证据和进展三个维度评估LLM智能体在固定权重下跨回合的自我改进能力。",
       "tags": [
-        "AI安全",
-        "教育",
-        "课程"
+        "AI Agent",
+        "自我改进",
+        "基准测试"
       ],
-      "url": "https://boazbk.github.io/mltheoryseminar/",
-      "sourceName": "Hacker News",
+      "url": "https://arxiv.org/abs/2611.26910",
+      "sourceName": "arXiv cs.AI",
       "score": 4.5,
       "userFeedback": null
     },
     {
       "id": "ds_1123_006",
-      "category": "行业动态",
-      "title": "本地AI入门指南：Inkling、Qwen与Unsloth",
-      "tldr": "一篇面向初学者的本地AI部署指南，介绍Inkling、Qwen和Unsloth工具的使用。",
+      "category": "论文速递",
+      "title": "TOUMAII：450万对工具调用偏好数据集及生成器",
+      "tldr": "构建450万对工具调用偏好数据集TOUMAII，并提供源无关生成器，助力企业智能体可靠调用工具与API。",
       "tags": [
-        "本地AI",
-        "入门",
-        "工具"
+        "工具调用",
+        "偏好数据集",
+        "AI Agent"
       ],
-      "url": "https://www.gpupartner.com/blog/beginners-guide-local-ai-inkling-qwen-unsloth",
-      "sourceName": "Hacker News",
+      "url": "https://arxiv.org/abs/2611.26722",
+      "sourceName": "arXiv cs.AI",
       "score": 4.4,
       "userFeedback": null
     }
