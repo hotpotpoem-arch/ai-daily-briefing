@@ -209,6 +209,77 @@ export default {
         return jsonResp({ error: err.message }, 500);
       }
     }
+    // 纯享阅读中转：由 Cloudflare 节点代理请求 r.jina.ai 并返回手机排版页面
+    if (url.pathname === '/api/read' && request.method === 'GET') {
+      const targetUrl = url.searchParams.get('url');
+      if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+        return new Response('无效的文章链接', { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      }
+
+      try {
+        const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
+          headers: {
+            'Accept': 'text/plain',
+            'X-Return-Format': 'markdown'
+          }
+        });
+
+        if (!jinaRes.ok) {
+          throw new Error(`抓取失败 (${jinaRes.status})`);
+        }
+
+        const md = await jinaRes.text();
+
+        // 轻量级 Markdown 转 HTML（零外部依赖，国内秒开）
+        const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const htmlBody = escapeHtml(md)
+          .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+          .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+          .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+          .replace(/\n{2,}/g, '</p><p>')
+          .replace(/\n/g, '<br/>');
+
+        const pageHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>纯享阅读 - AI 每日简报</title>
+  <style>
+    body { margin: 0; padding: 16px 18px 48px; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; line-height: 1.75; color: #1f2937; background: #fafaf9; font-size: 16px; word-break: break-word; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    .top-bar a { color: #2563eb; text-decoration: none; font-weight: 500; }
+    h1 { font-size: 20px; line-height: 1.4; margin: 16px 0 12px; color: #111827; }
+    h2 { font-size: 18px; margin: 20px 0 10px; color: #111827; }
+    h3 { font-size: 16px; margin: 16px 0 8px; color: #374151; }
+    p { margin: 12px 0; }
+    a { color: #2563eb; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <a href="javascript:history.back()">← 返回简报</a>
+    <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
+  </div>
+  <article><p>${htmlBody}</p></article>
+</body>
+</html>`;
+
+        return new Response(pageHtml, {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'public, max-age=3600'
+          }
+        });
+      } catch (err) {
+        return new Response(
+          `<html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px;line-height:1.6;"><h3>纯享解析失败</h3><p>${err.message}</p><p><a href="${targetUrl}">点击直接查看原文 ↗</a></p></body></html>`,
+          { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
+      }
+    }
 
     // 其他请求照常返回前端静态页面
     return env.ASSETS.fetch(request);

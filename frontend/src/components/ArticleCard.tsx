@@ -33,7 +33,7 @@ export function ArticleCard({ article, onFeedbackSubmit }: ArticleCardProps) {
     }
   };
 
-  const cleanReadUrl = `https://r.jina.ai/${article.url}`;
+  const cleanReadUrl = `/api/read?url=${encodeURIComponent(article.url)}`;
 
   return (
     <article className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md">
