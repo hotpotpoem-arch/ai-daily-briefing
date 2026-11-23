@@ -397,7 +397,7 @@ export default {
       word-break: break-word;
     }
     article h1 {
-      font-size: 16px;
+      font-size: 20px;
       line-height: 1.4;
       font-weight: 700;
       margin: 8px 0 20px;
