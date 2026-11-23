@@ -209,7 +209,67 @@ export default {
         return jsonResp({ error: err.message }, 500);
       }
     }
-// 纯享阅读中转：支持 Jina API Key，无 Key 或遇 429 时自动直连原文并清洗排版
+// 1. AI 精准翻译接口（供纯享页异步调用）
+    if (url.pathname === '/api/translate' && request.method === 'POST') {
+      try {
+        if (!env.LLM_API_KEY) {
+          return new Response(JSON.stringify({ error: '未配置 LLM_API_KEY 环境变量' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        }
+
+        const { text } = await request.json();
+        if (!text || !text.trim()) {
+          return new Response(JSON.stringify({ error: '待翻译内容为空' }), { status: 400 });
+        }
+
+        const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+        const model = env.LLM_MODEL || 'deepseek-chat';
+
+        const llmRes = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${env.LLM_API_KEY}`
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.2,
+            messages: [
+              {
+                role: 'system',
+                content: '你是一位精通人工智能、计算机科学与科技新闻的专业中英译者。请将用户提供的文章正文准确、流畅地翻译为简体中文。\n要求：\n1. 严格忠实原文，不遗漏关键数据、实验结论与技术细节，不擅自发挥。\n2. 保留常见专业英文术语（如 LLM、Agent、Transformer、Benchmark、API、Fine-tuning 等）或采用业内通用译法。\n3. 保持原有的段落与小标题结构，使用简洁的 Markdown（如 ## 标题、加粗、列表）输出，不要输出任何开场白或解释。'
+              },
+              {
+                role: 'user',
+                content: text.slice(0, 12000)
+              }
+            ]
+          })
+        });
+
+        if (!llmRes.ok) {
+          const errText = await llmRes.text();
+          throw new Error(`模型接口报错 (${llmRes.status}): ${errText.slice(0, 120)}`);
+        }
+
+        const data = await llmRes.json();
+        const translated = data?.choices?.[0]?.message?.content?.trim();
+        if (!translated) throw new Error('模型未返回有效译文');
+
+        return new Response(JSON.stringify({ translated }), {
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+        });
+      }
+    }
+
+    // 2. 纯享阅读中转（支持自动 AI 中文翻译 + 中原文切换）
     if (url.pathname === '/api/read' && request.method === 'GET') {
       const targetUrl = url.searchParams.get('url');
       if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
@@ -221,7 +281,6 @@ export default {
       let articleHtml = '';
 
       try {
-        // 1. 如果在 Cloudflare 环境变量里配置了 JINA_API_KEY，优先走 Jina
         if (env.JINA_API_KEY) {
           const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
             headers: {
@@ -243,7 +302,6 @@ export default {
           }
         }
 
-        // 2. 无 Key 或 Jina 失败时，直接由 Cloudflare 节点抓取原文并清洗 HTML
         if (!articleHtml) {
           const res = await fetch(targetUrl, {
             headers: {
@@ -259,14 +317,12 @@ export default {
           const titleMatch = rawHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
           if (titleMatch) title = titleMatch[1].replace(/\s+/g, ' ').trim();
 
-          // 优先提取 <article> 或 <main> 区域，没有则取 <body>
           const mainMatch = rawHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
             || rawHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
             || rawHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
 
           let body = mainMatch ? mainMatch[1] : rawHtml;
 
-          // 清除脚本、样式、导航、页眉页脚、表单、SVG 等干扰元素
           body = body
             .replace(/<(script|style|noscript|iframe|svg|nav|header|footer|aside|form|button)[^>]*>[\s\S]*?<\/\1>/gi, '')
             .replace(/<!--[\s\S]*?-->/g, '')
@@ -287,8 +343,11 @@ export default {
   <title>${escapeHtml(title)} - 纯享阅读</title>
   <style>
     body { margin: 0; padding: 16px 18px 48px; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; line-height: 1.75; color: #1f2937; background: #fafaf9; font-size: 16px; word-break: break-word; }
-    .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
     .top-bar a { color: #2563eb; text-decoration: none; font-weight: 500; }
+    .trans-bar { display: flex; justify-content: space-between; align-items: center; background: #eff6ff; color: #1e40af; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
+    .trans-btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+    .trans-btn:disabled { opacity: 0.5; }
     h1 { font-size: 20px; line-height: 1.4; margin: 12px 0 16px; color: #111827; }
     h2 { font-size: 18px; margin: 20px 0 10px; color: #111827; }
     h3 { font-size: 16px; margin: 16px 0 8px; color: #374151; }
@@ -303,7 +362,66 @@ export default {
     <a href="javascript:history.back()">← 返回简报</a>
     <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
   </div>
-  <article>${articleHtml}</article>
+  <div id="trans-bar" class="trans-bar" style="display:none;">
+    <span id="trans-status">正在 AI 精准翻译为中文...</span>
+    <button id="toggle-btn" class="trans-btn" style="display:none;">切换原文</button>
+  </div>
+  <article id="orig-content">${articleHtml}</article>
+  <article id="zh-content" style="display:none;"></article>
+
+  <script>
+    (async function() {
+      const origEl = document.getElementById('orig-content');
+      const zhEl = document.getElementById('zh-content');
+      const bar = document.getElementById('trans-bar');
+      const statusEl = document.getElementById('trans-status');
+      const toggleBtn = document.getElementById('toggle-btn');
+
+      const plainText = (origEl.innerText || '').trim();
+      if (!plainText) return;
+
+      // 如果原文中文占比已超过 25%，说明本身就是中文文章，跳过翻译
+      const cnChars = (plainText.match(/[\\u4e00-\\u9fa5]/g) || []).length;
+      if (cnChars / plainText.length > 0.25) return;
+
+      bar.style.display = 'flex';
+
+      const renderMd = (md) => md
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/\\n{2,}/g, '</p><p>')
+        .replace(/\\n/g, '<br/>');
+
+      try {
+        const res = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: plainText })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.translated) throw new Error(data.error || '翻译失败');
+
+        zhEl.innerHTML = '<p>' + renderMd(data.translated) + '</p>';
+        origEl.style.display = 'none';
+        zhEl.style.display = 'block';
+        statusEl.textContent = '已由 AI 精准翻译为中文';
+        toggleBtn.style.display = 'inline-block';
+
+        let showingZh = true;
+        toggleBtn.onclick = () => {
+          showingZh = !showingZh;
+          zhEl.style.display = showingZh ? 'block' : 'none';
+          origEl.style.display = showingZh ? 'none' : 'block';
+          toggleBtn.textContent = showingZh ? '切换原文' : '查看译文';
+        };
+      } catch (e) {
+        statusEl.textContent = '自动翻译失败：' + e.message;
+      }
+    })();
+  </script>
 </body>
 </html>`;
 
