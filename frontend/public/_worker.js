@@ -342,6 +342,11 @@ export default {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapeHtml(title)} - 纯享阅读</title>
   <style>
+  html, body {
+      -webkit-text-size-adjust: 100% !important;
+      text-size-adjust: 100% !important;
+      -moz-text-size-adjust: 100% !important;
+    }
     body { margin: 0; padding: 16px 18px 48px; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; line-height: 1.75; color: #1f2937; background: #fafaf9; font-size: 16px; word-break: break-word; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
     .top-bar a { color: #2563eb; text-decoration: none; font-weight: 500; }
@@ -370,6 +375,20 @@ export default {
   <article id="zh-content" style="display:none;"></article>
 
   <script>
+  // 强制锁定微信内置浏览器字号，不跟随系统/微信缩放
+    (function() {
+      function lockFontSize() {
+        WeixinJSBridge.invoke('setFontSizeCallback', { 'fontSize': 0 });
+        WeixinJSBridge.on('menu:setfont', function() {
+          WeixinJSBridge.invoke('setFontSizeCallback', { 'fontSize': 0 });
+        });
+      }
+      if (typeof WeixinJSBridge === 'object' && typeof WeixinJSBridge.invoke === 'function') {
+        lockFontSize();
+      } else {
+        document.addEventListener('WeixinJSBridgeReady', lockFontSize, false);
+      }
+    })();
     (async function() {
       const origEl = document.getElementById('orig-content');
       const zhEl = document.getElementById('zh-content');
