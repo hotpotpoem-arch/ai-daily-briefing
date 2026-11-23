@@ -209,52 +209,92 @@ export default {
         return jsonResp({ error: err.message }, 500);
       }
     }
-    // 纯享阅读中转：由 Cloudflare 节点代理请求 r.jina.ai 并返回手机排版页面
+// 纯享阅读中转：支持 Jina API Key，无 Key 或遇 429 时自动直连原文并清洗排版
     if (url.pathname === '/api/read' && request.method === 'GET') {
       const targetUrl = url.searchParams.get('url');
       if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
         return new Response('无效的文章链接', { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
       }
 
-      try {
-        const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
-          headers: {
-            'Accept': 'text/plain',
-            'X-Return-Format': 'markdown'
-          }
-        });
+      const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      let title = '纯享阅读';
+      let articleHtml = '';
 
-        if (!jinaRes.ok) {
-          throw new Error(`抓取失败 (${jinaRes.status})`);
+      try {
+        // 1. 如果在 Cloudflare 环境变量里配置了 JINA_API_KEY，优先走 Jina
+        if (env.JINA_API_KEY) {
+          const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
+            headers: {
+              'Accept': 'text/plain',
+              'X-Return-Format': 'markdown',
+              'Authorization': `Bearer ${env.JINA_API_KEY}`
+            }
+          });
+          if (jinaRes.ok) {
+            const md = await jinaRes.text();
+            articleHtml = '<p>' + escapeHtml(md)
+              .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+              .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+              .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+              .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+              .replace(/\n{2,}/g, '</p><p>')
+              .replace(/\n/g, '<br/>') + '</p>';
+          }
         }
 
-        const md = await jinaRes.text();
+        // 2. 无 Key 或 Jina 失败时，直接由 Cloudflare 节点抓取原文并清洗 HTML
+        if (!articleHtml) {
+          const res = await fetch(targetUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            },
+            redirect: 'follow'
+          });
 
-        // 轻量级 Markdown 转 HTML（零外部依赖，国内秒开）
-        const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const htmlBody = escapeHtml(md)
-          .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-          .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-          .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-          .replace(/\n{2,}/g, '</p><p>')
-          .replace(/\n/g, '<br/>');
+          if (!res.ok) throw new Error(`原文抓取失败 (${res.status})`);
+          const rawHtml = await res.text();
+
+          const titleMatch = rawHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+          if (titleMatch) title = titleMatch[1].replace(/\s+/g, ' ').trim();
+
+          // 优先提取 <article> 或 <main> 区域，没有则取 <body>
+          const mainMatch = rawHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+            || rawHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+            || rawHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+
+          let body = mainMatch ? mainMatch[1] : rawHtml;
+
+          // 清除脚本、样式、导航、页眉页脚、表单、SVG 等干扰元素
+          body = body
+            .replace(/<(script|style|noscript|iframe|svg|nav|header|footer|aside|form|button)[^>]*>[\s\S]*?<\/\1>/gi, '')
+            .replace(/<!--[\s\S]*?-->/g, '')
+            .replace(/<(p|div|h[1-6]|li|blockquote|br)[^>]*>/gi, '\n<$1>')
+            .replace(/<(?!\/?(p|h[1-6]|strong|b|em|i|ul|ol|li|blockquote|pre|code|br|a)\b)[^>]+>/gi, '')
+            .replace(/\s+on\w+="[^"]*"/gi, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+
+          articleHtml = `<h1>${escapeHtml(title)}</h1>` + body;
+        }
 
         const pageHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>纯享阅读 - AI 每日简报</title>
+  <title>${escapeHtml(title)} - 纯享阅读</title>
   <style>
     body { margin: 0; padding: 16px 18px 48px; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; line-height: 1.75; color: #1f2937; background: #fafaf9; font-size: 16px; word-break: break-word; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
     .top-bar a { color: #2563eb; text-decoration: none; font-weight: 500; }
-    h1 { font-size: 20px; line-height: 1.4; margin: 16px 0 12px; color: #111827; }
+    h1 { font-size: 20px; line-height: 1.4; margin: 12px 0 16px; color: #111827; }
     h2 { font-size: 18px; margin: 20px 0 10px; color: #111827; }
     h3 { font-size: 16px; margin: 16px 0 8px; color: #374151; }
     p { margin: 12px 0; }
+    pre, code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 14px; overflow-x: auto; }
+    blockquote { margin: 12px 0; padding-left: 12px; border-left: 3px solid #d1d5db; color: #4b5563; }
     a { color: #2563eb; word-break: break-all; }
   </style>
 </head>
@@ -263,7 +303,7 @@ export default {
     <a href="javascript:history.back()">← 返回简报</a>
     <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
   </div>
-  <article><p>${htmlBody}</p></article>
+  <article>${articleHtml}</article>
 </body>
 </html>`;
 
@@ -275,7 +315,7 @@ export default {
         });
       } catch (err) {
         return new Response(
-          `<html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px;line-height:1.6;"><h3>纯享解析失败</h3><p>${err.message}</p><p><a href="${targetUrl}">点击直接查看原文 ↗</a></p></body></html>`,
+          `<html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px;line-height:1.6;"><h3>纯享解析失败</h3><p>${escapeHtml(err.message)}</p><p><a href="${escapeHtml(targetUrl)}">点击直接查看原文 ↗</a></p></body></html>`,
           { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
       }
