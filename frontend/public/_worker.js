@@ -339,43 +339,131 @@ export default {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>${escapeHtml(title)} - 纯享阅读</title>
   <style>
-  html, body {
+    html, body {
       -webkit-text-size-adjust: 100% !important;
       text-size-adjust: 100% !important;
-      -moz-text-size-adjust: 100% !important;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f4;
+      color: #1c1917;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
     }
-    body { margin: 0; padding: 16px 18px 48px; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; line-height: 1.75; color: #1f2937; background: #fafaf9; font-size: 16px; word-break: break-word; }
-    .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      min-height: 100vh;
+      background: #ffffff;
+      padding: 16px 20px 64px;
+      box-sizing: border-box;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 14px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #f0f0ef;
+      font-size: 14px;
+    }
     .top-bar a { color: #2563eb; text-decoration: none; font-weight: 500; }
-    .trans-bar { display: flex; justify-content: space-between; align-items: center; background: #eff6ff; color: #1e40af; padding: 8px 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
-    .trans-btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
-    .trans-btn:disabled { opacity: 0.5; }
-    h1 { font-size: 20px; line-height: 1.4; margin: 12px 0 16px; color: #111827; }
-    h2 { font-size: 18px; margin: 20px 0 10px; color: #111827; }
-    h3 { font-size: 16px; margin: 16px 0 8px; color: #374151; }
-    p { margin: 12px 0; }
-    pre, code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 14px; overflow-x: auto; }
-    blockquote { margin: 12px 0; padding-left: 12px; border-left: 3px solid #d1d5db; color: #4b5563; }
-    a { color: #2563eb; word-break: break-all; }
+    .trans-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f0f7ff;
+      color: #1d4ed8;
+      padding: 10px 14px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      font-size: 13px;
+    }
+    .trans-btn {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    article {
+      font-size: 16px;
+      line-height: 1.8;
+      letter-spacing: 0.02em;
+      word-break: break-word;
+    }
+    article h1 {
+      font-size: 21px;
+      line-height: 1.4;
+      font-weight: 700;
+      margin: 8px 0 20px;
+      color: #111827;
+    }
+    article h2 {
+      font-size: 18px;
+      line-height: 1.45;
+      font-weight: 600;
+      margin: 28px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #f3f4f6;
+      color: #111827;
+    }
+    article h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 22px 0 8px;
+      color: #374151;
+    }
+    article p {
+      margin: 0 0 16px;
+      text-align: justify;
+    }
+    article ul, article ol {
+      margin: 0 0 16px;
+      padding-left: 22px;
+    }
+    article li {
+      margin-bottom: 8px;
+    }
+    article blockquote {
+      margin: 16px 0;
+      padding: 10px 14px;
+      background: #f9fafb;
+      border-left: 3px solid #2563eb;
+      color: #4b5563;
+      border-radius: 0 6px 6px 0;
+    }
+    article pre, article code {
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    article a { color: #2563eb; text-decoration: none; border-bottom: 1px solid #bfdbfe; }
+    article p:empty, article div:empty { display: none; }
   </style>
 </head>
 <body>
-  <div class="top-bar">
-    <a href="javascript:history.back()">← 返回简报</a>
-    <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
+  <div class="container">
+    <div class="top-bar">
+      <a href="javascript:history.back()">← 返回简报</a>
+      <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
+    </div>
+    <div id="trans-bar" class="trans-bar" style="display:none;">
+      <span id="trans-status">正在 AI 精准翻译为中文...</span>
+      <button id="toggle-btn" class="trans-btn" style="display:none;">切换原文</button>
+    </div>
+    <article id="orig-content">${articleHtml}</article>
+    <article id="zh-content" style="display:none;"></article>
   </div>
-  <div id="trans-bar" class="trans-bar" style="display:none;">
-    <span id="trans-status">正在 AI 精准翻译为中文...</span>
-    <button id="toggle-btn" class="trans-btn" style="display:none;">切换原文</button>
-  </div>
-  <article id="orig-content">${articleHtml}</article>
-  <article id="zh-content" style="display:none;"></article>
 
   <script>
-  // 强制锁定微信内置浏览器字号，不跟随系统/微信缩放
+    // 1. 强制锁定微信内置浏览器字号
     (function() {
       function lockFontSize() {
         WeixinJSBridge.invoke('setFontSizeCallback', { 'fontSize': 0 });
@@ -389,6 +477,8 @@ export default {
         document.addEventListener('WeixinJSBridgeReady', lockFontSize, false);
       }
     })();
+
+    // 2. 完整 Markdown 渲染 + 自动 AI 翻译
     (async function() {
       const origEl = document.getElementById('orig-content');
       const zhEl = document.getElementById('zh-content');
@@ -396,23 +486,63 @@ export default {
       const statusEl = document.getElementById('trans-status');
       const toggleBtn = document.getElementById('toggle-btn');
 
-      const plainText = (origEl.innerText || '').trim();
+      // 清理原文里多余的空行和极短噪音块
+      const plainText = (origEl.innerText || '').replace(/\\n{3,}/g, '\\n\\n').trim();
       if (!plainText) return;
 
-      // 如果原文中文占比已超过 25%，说明本身就是中文文章，跳过翻译
       const cnChars = (plainText.match(/[\\u4e00-\\u9fa5]/g) || []).length;
       if (cnChars / plainText.length > 0.25) return;
 
       bar.style.display = 'flex';
 
-      const renderMd = (md) => md
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
-        .replace(/\\n{2,}/g, '</p><p>')
-        .replace(/\\n/g, '<br/>');
+      function renderMarkdown(md) {
+        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const inline = (s) => esc(s)
+          .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+          .replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+
+        const lines = md.split(/\\r?\\n/);
+        let html = '';
+        let inUl = false;
+        let inOl = false;
+
+        const closeLists = () => {
+          if (inUl) { html += '</ul>'; inUl = false; }
+          if (inOl) { html += '</ol>'; inOl = false; }
+        };
+
+        for (let raw of lines) {
+          const line = raw.trim();
+          if (!line) { closeLists(); continue; }
+
+          if (/^###\\s+/.test(line)) {
+            closeLists();
+            html += '<h3>' + inline(line.replace(/^###\\s+/, '')) + '</h3>';
+          } else if (/^##\\s+/.test(line)) {
+            closeLists();
+            html += '<h2>' + inline(line.replace(/^##\\s+/, '')) + '</h2>';
+          } else if (/^#\\s+/.test(line)) {
+            closeLists();
+            html += '<h1>' + inline(line.replace(/^#\\s+/, '')) + '</h1>';
+          } else if (/^>\\s*/.test(line)) {
+            closeLists();
+            html += '<blockquote>' + inline(line.replace(/^>\\s*/, '')) + '</blockquote>';
+          } else if (/^[-*]\\s+/.test(line)) {
+            if (inOl) { html += '</ol>'; inOl = false; }
+            if (!inUl) { html += '<ul>'; inUl = true; }
+            html += '<li>' + inline(line.replace(/^[-*]\\s+/, '')) + '</li>';
+          } else if (/^\\d+\\.\\s+/.test(line)) {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            if (!inOl) { html += '<ol>'; inOl = true; }
+            html += '<li>' + inline(line.replace(/^\\d+\\.\\s+/, '')) + '</li>';
+          } else {
+            closeLists();
+            html += '<p>' + inline(line) + '</p>';
+          }
+        }
+        closeLists();
+        return html;
+      }
 
       try {
         const res = await fetch('/api/translate', {
@@ -423,7 +553,7 @@ export default {
         const data = await res.json();
         if (!res.ok || !data.translated) throw new Error(data.error || '翻译失败');
 
-        zhEl.innerHTML = '<p>' + renderMd(data.translated) + '</p>';
+        zhEl.innerHTML = renderMarkdown(data.translated);
         origEl.style.display = 'none';
         zhEl.style.display = 'block';
         statusEl.textContent = '已由 AI 精准翻译为中文';
