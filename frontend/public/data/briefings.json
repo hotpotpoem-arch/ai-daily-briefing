@@ -1,26 +1,101 @@
 {
   "2026-11-23": {
     "reportDate": "2026-11-23",
-    "overview": "【重磅加推】Anthropic 数学家借助 Claude 完成 167 年未解难题「黎曼猜想」的 Lean 形式化证明，已获 Lean 与 Mathlib 两大形式化数学社区联合核验。",
+    "overview": "今日AI领域迎来多款前沿模型发布，包括Google DeepMind的Gemini 4系列和Genie 4，以及Hugging Face的轻量级模型Inkling 2 Mini。同时，AI智能体在电商等场景加速落地，Meta Muse与Walmart合作实现自主购物。此外，AI评估与安全成为焦点，OpenAI探讨困惑度与智能度量，METR更新能力时间线图，UN就自主武器规则展开讨论。",
     "stats": {
-      "scannedCount": 1,
-      "selectedCount": 1,
-      "durationSeconds": 1
+      "scannedCount": 27,
+      "selectedCount": 6,
+      "durationSeconds": 6
     },
     "articles": [
       {
-        "id": "manual_1123_2036",
-        "category": "重磅突发",
-        "title": "AI 联手攻克 167 年数学难题：Claude 辅助完成黎曼猜想证明并获 Lean 社区核验",
-        "tldr": "Anthropic 数学家 Levent Alpöge 借助 Claude 耗时六周完成黎曼猜想的 Lean 形式化证明（约 1700 万行代码），Lean 与 Mathlib 社区已联合确认其逻辑与命题表述通过验证，但人类可读版本仍待整理。",
+        "id": "ds_1123_001",
+        "category": "前沿发布",
+        "title": "Google DeepMind发布Gemini 4 Neon与Hydrogen，开启多模态新纪元",
+        "tldr": "Gemini 4系列包含Neon和Hydrogen两个版本，预计在推理、多模态理解和长上下文处理上实现重大突破，进一步巩固Google在基础模型领域的领先地位。",
         "tags": [
-          "Claude",
-          "黎曼猜想",
-          "形式化证明"
+          "Gemini 4",
+          "多模态",
+          "Google DeepMind"
         ],
-        "url": "https://www.theguardian.com/technology/2026/nov/21/anthropic-riemann-hypothesis-solved-claude-ai",
-        "sourceName": "The Guardian",
-        "score": 5.0,
+        "url": "https://deepmind.google/blog/introducing-gemini-4-neon/",
+        "sourceName": "Google DeepMind",
+        "score": 4.9,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_002",
+        "category": "前沿发布",
+        "title": "Genie 4正式上线：从文本生成可交互3D世界的生成式模型",
+        "tldr": "Genie 4能够根据文本提示生成可玩的3D环境，标志着生成式AI在虚拟世界构建和具身智能训练模拟器方面迈出关键一步。",
+        "tags": [
+          "Genie 4",
+          "生成式3D",
+          "具身智能"
+        ],
+        "url": "https://deepmind.google/blog/genie-4-is-now-available/",
+        "sourceName": "Google DeepMind",
+        "score": 4.8,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_003",
+        "category": "深度解读",
+        "title": "OpenAI详解困惑度与智能度量：为AI能力评估建立共同语言",
+        "tldr": "OpenAI官方博客深入探讨困惑度作为衡量模型进步指标的局限性及改进方向，旨在推动开发者社区形成统一的模型能力评估标准。",
+        "tags": [
+          "模型评估",
+          "困惑度",
+          "OpenAI"
+        ],
+        "url": "https://openai.com/index/perplexity-and-intelligence",
+        "sourceName": "OpenAI News",
+        "score": 4.7,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_004",
+        "category": "行业动态",
+        "title": "Meta Muse智能体接入Walmart，自主完成黑五购物",
+        "tldr": "Walmart推出Agent Gateway，允许Meta Muse等AI智能体代表用户浏览商品并完成购买，标志着AI Agent在电商场景的商业化落地迈出重要一步。",
+        "tags": [
+          "AI Agent",
+          "电商",
+          "Meta Muse"
+        ],
+        "url": "https://www.theverge.com/ai-artificial-intelligence/1039874/walmart-agent-gateway-meta-muse-black-friday",
+        "sourceName": "The Verge AI",
+        "score": 4.6,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_005",
+        "category": "深度解读",
+        "title": "METR更新AI能力时间线图：部分能力指数增长，但判断力仍是短板",
+        "tldr": "MIT Tech Review报道METR最新报告，指出AI在编码等任务上持续指数级进步，但在需要人类判断力的任务上表现相对滞后，引发对AI能力边界的重新思考。",
+        "tags": [
+          "AI评估",
+          "能力时间线",
+          "METR"
+        ],
+        "url": "https://www.technologyreview.com/2026/11/20/1149399/the-most-misunderstood-graph-in-ai-just-got-a-major-update/",
+        "sourceName": "MIT Tech Review AI",
+        "score": 4.5,
+        "userFeedback": null
+      },
+      {
+        "id": "ds_1123_006",
+        "category": "行业动态",
+        "title": "联合国未能就自主武器规则达成一致，仅同意继续讨论",
+        "tldr": "日内瓦联合国会议在监管“杀手机器人”上未取得实质进展，代表们仅同意“开始讨论选项”，凸显全球AI武器治理的复杂性与紧迫性。",
+        "tags": [
+          "AI监管",
+          "自主武器",
+          "联合国"
+        ],
+        "url": "https://www.theverge.com/tech/1039554/un-regulations-killer-robots",
+        "sourceName": "The Verge AI",
+        "score": 4.4,
         "userFeedback": null
       }
     ]
