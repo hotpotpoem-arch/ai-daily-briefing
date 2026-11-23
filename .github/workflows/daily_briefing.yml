@@ -2,9 +2,7 @@ name: Daily AI Briefing
 
 on:
   schedule:
-    # 每天北京时间早上 8:00（UTC 00:00）自动运行
-    - cron: '0 0 * * *'
-  # 允许在 GitHub 网页上随时手动点击测试
+    - cron: '5 2 * * *'   # 每天北京时间 10:05（UTC 02:05）
   workflow_dispatch:
 
 permissions:
