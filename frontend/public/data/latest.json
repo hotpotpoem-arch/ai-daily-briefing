@@ -1,17 +1,17 @@
 {
   "reportDate": "2026-11-23",
-  "overview": "今日AI领域迎来多款前沿模型发布，包括Google DeepMind的Gemini 4系列和Genie 4，以及Hugging Face的轻量级模型Inkling 2 Mini。同时，AI智能体在电商和金融研究等实际场景中加速落地，而关于AI评估、安全与监管的讨论也在持续深化。",
+  "overview": "今日AI领域迎来多款前沿模型发布，包括Google DeepMind的Gemini 4系列和Genie 4，以及Hugging Face的Inkling 2 Mini等。同时，AI智能体在电商场景加速落地，Meta Muse与Walmart合作实现自动购物。此外，AI评估、安全与监管议题持续升温，OpenAI发布困惑度评估方法及对抗蒸馏防御策略，联合国未能就自主武器规则达成一致。",
   "stats": {
     "scannedCount": 27,
     "selectedCount": 6,
-    "durationSeconds": 7
+    "durationSeconds": 6
   },
   "articles": [
     {
       "id": "ds_1123_001",
       "category": "前沿发布",
-      "title": "Google DeepMind 发布 Gemini 4 Neon 与 Hydrogen，开启多模态新纪元",
-      "tldr": "Gemini 4 Neon 和 Hydrogen 是 DeepMind 最新一代多模态大模型，预计在推理、多模态理解和长上下文处理上实现显著提升，为 AI 应用带来更强性能。",
+      "title": "Google DeepMind发布Gemini 4 Neon与Hydrogen，开启多模态新纪元",
+      "tldr": "Gemini 4系列包含Neon和Hydrogen两个版本，预计在推理、多模态理解和长上下文处理上实现重大突破，进一步巩固Google在基础模型领域的领先地位。",
       "tags": [
         "Gemini 4",
         "多模态",
@@ -25,12 +25,12 @@
     {
       "id": "ds_1123_002",
       "category": "前沿发布",
-      "title": "Genie 4 正式上线：从文本生成可交互 3D 场景的突破",
-      "tldr": "Genie 4 是 DeepMind 的生成式交互环境模型，可根据文本或图像生成可玩的 3D 世界，在具身智能和游戏开发领域具有重大应用潜力。",
+      "title": "Genie 4正式开放：从文本生成可交互3D世界的通用模型",
+      "tldr": "Genie 4能够根据文本提示生成可交互的3D环境，标志着生成式AI在具身智能和游戏开发领域的重大进步，为AI智能体训练提供丰富模拟场景。",
       "tags": [
         "Genie 4",
-        "生成式AI",
-        "3D场景"
+        "具身智能",
+        "3D生成"
       ],
       "url": "https://deepmind.google/blog/genie-4-is-now-available/",
       "sourceName": "Google DeepMind",
@@ -40,10 +40,10 @@
     {
       "id": "ds_1123_003",
       "category": "深度解读",
-      "title": "OpenAI 详解困惑度与智能评估：为何它仍是衡量模型进步的关键指标",
-      "tldr": "OpenAI 官方博客深入探讨困惑度（Perplexity）作为评估 AI 模型能力的指标，解释其计算方式、局限性以及如何帮助开发者建立统一的评估框架。",
+      "title": "OpenAI提出困惑度新方法，旨在统一AI能力评估标准",
+      "tldr": "OpenAI发布文章探讨如何用困惑度衡量AI模型进展，并推动开发者建立共享的评估框架，以更可靠地追踪新兴能力，对AI安全与治理具有重要意义。",
       "tags": [
-        "模型评估",
+        "AI评估",
         "困惑度",
         "OpenAI"
       ],
@@ -55,23 +55,23 @@
     {
       "id": "ds_1123_004",
       "category": "深度解读",
-      "title": "MIT 科技评论：被误解的 AI 能力增长曲线迎来重要更新",
-      "tldr": "METR 最新报告更新了 AI 任务时间跨度图，显示部分能力呈指数级提升，但模型在需要判断力的任务上仍远逊于编程等结构化任务。",
+      "title": "OpenAI详解对抗蒸馏防御：多层策略保护模型能力不被窃取",
+      "tldr": "OpenAI分享其对抗蒸馏的分层防御方法，结合模型训练、安全防护、检测与执法，防止恶意行为者提取模型能力，为AI知识产权保护提供新思路。",
       "tags": [
-        "AI评估",
-        "METR",
-        "能力趋势"
+        "对抗蒸馏",
+        "模型安全",
+        "OpenAI"
       ],
-      "url": "https://www.technologyreview.com/2026/11/20/1149399/the-most-misunderstood-graph-in-ai-just-got-a-major-update/",
-      "sourceName": "MIT Tech Review AI",
+      "url": "https://openai.com/index/combatting-adversarial-distillation",
+      "sourceName": "OpenAI News",
       "score": 4.6,
       "userFeedback": null
     },
     {
       "id": "ds_1123_005",
       "category": "行业动态",
-      "title": "沃尔玛联手 Meta Muse：AI 智能体首次大规模接管黑五购物",
-      "tldr": "沃尔玛推出 Agent Gateway，允许 Meta 的 Muse 智能体代用户浏览商品并完成黑五促销购买，标志着 AI 智能体在电商场景的首次大规模商用。",
+      "title": "Meta Muse智能体接入Walmart，自动完成黑五购物",
+      "tldr": "Walmart向Meta Muse开放Agent Gateway，允许AI智能体代表用户查找并购买商品，同时保护用户购买历史隐私，标志着AI智能体在电商领域迈出商业化关键一步。",
       "tags": [
         "AI Agent",
         "电商",
@@ -85,15 +85,15 @@
     {
       "id": "ds_1123_006",
       "category": "深度解读",
-      "title": "OpenAI 首席科学家谈如何为 AI 发展设定“限速”",
-      "tldr": "OpenAI 首席科学家探讨为 AI 发展设定速度限制的可行性，强调需要先就衡量 AI 进展的指标达成共识，并讨论了算力与算法进步的权衡。",
+      "title": "METR更新AI能力时间线图：编码能力突飞猛进，判断力仍是短板",
+      "tldr": "AI评估非营利组织METR发布报告，指出部分AI能力呈指数级提升，但模型在需要判断力的任务上表现仍远逊于编码任务，为AI能力评估提供重要参考。",
       "tags": [
-        "AI监管",
-        "发展限速",
-        "OpenAI"
+        "AI评估",
+        "METR",
+        "能力时间线"
       ],
-      "url": "https://techcrunch.com/2026/11/22/openais-chief-scientist-has-thoughts-on-how-to-limit-ai-development/",
-      "sourceName": "TechCrunch AI",
+      "url": "https://www.technologyreview.com/2026/11/20/1149399/the-most-misunderstood-graph-in-ai-just-got-a-major-update/",
+      "sourceName": "MIT Tech Review AI",
       "score": 4.4,
       "userFeedback": null
     }
