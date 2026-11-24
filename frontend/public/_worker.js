@@ -409,13 +409,22 @@ export default {
           'Accept': 'text/plain',
           'X-Return-Format': 'markdown',
           'Authorization': `Bearer ${env.JINA_API_KEY}`,
-          "X-Remove-Selector": "header, nav, footer, aside, [role='navigation'], [role='banner'], [class*='ad-'], [class*='ads'], [class*='login'], [class*='signin'], [class*='signup'], [class*='subscribe'], [class*='newsletter'], [class*='cookie'], [class*='share'], [class*='social'], [class*='related'], [class*='recommend'], [class*='comment'], [class*='paywall'], [id*='ad'], [id*='cookie']",
+          'X-Remove-Selector': "header, nav, footer, aside, [role='navigation'], [role='banner'], [class*='ad-'], [class*='ads'], [class*='login'], [class*='signin'], [class*='signup'], [class*='subscribe'], [class*='newsletter'], [class*='cookie'], [class*='share'], [class*='social'], [class*='related'], [class*='recommend'], [class*='comment'], [class*='paywall'], [id*='ad'], [id*='cookie']",
           'X-Target-Selector': 'article, main, .article-body, .uni-blog-article'
         }
-          });
-          if (jinaRes.ok) {
-            const md = await jinaRes.text();
-            articleHtml = '<p>' + escapeHtml(md)
+      });
+      if (jinaRes.ok) {
+        const rawMd = await jinaRes.text();
+        const md = rawMd
+          .split('\n')
+          .filter(line => {
+            const trimmed = line.trim();
+            if (/^[-*•]\s*\[.*?\]\(https?:\/\/.*?\)$/.test(trimmed)) return false;
+            if (/^(Sign in|Log in|Sign up|Subscribe|Accept all cookies|Share this|Related articles)/i.test(trimmed)) return false;
+            return true;
+          })
+          .join('\n');
+        articleHtml = '<p>' + escapeHTML(md)
               .replace(/^### (.*$)/gim, '<h3>$1</h3>')
               .replace(/^## (.*$)/gim, '<h2>$1</h2>')
               .replace(/^# (.*$)/gim, '<h1>$1</h1>')
