@@ -41,9 +41,9 @@ RSS_SOURCES = [
     ("Google DeepMind", "https://deepmind.google/blog/rss.xml", 4),
     ("Hugging Face Blog", "https://huggingface.co/blog/feed.xml", 4),
     ("MIT Tech Review AI", "https://www.technologyreview.com/topic/artificial-intelligence/feed", 5),
-    ("The Verge AI", "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", 5),
-    ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", 5),
-    ("VentureBeat AI", "https://venturebeat.com/category/ai/feed/", 5),
+    ("The Verge AI", "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", 10),
+    ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", 10),
+    ("VentureBeat AI", "https://venturebeat.com/category/ai/feed/", 10),
 ]
 
 
