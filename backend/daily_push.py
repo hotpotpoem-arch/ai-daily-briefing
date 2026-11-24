@@ -11,54 +11,54 @@ load_dotenv()
 SITE_URL = "https://ai-daily-briefing-543.pages.dev"
 
 def push_to_wecom(report: dict) -> None:
-    """通过企业微信自建应用发送图文卡片到个人微信（需开启微信插件）"""
+    """通过企业微信自建应用发送图文卡片到个人微信（支持静态 IP 代理）"""
     corp_id = os.getenv("WECOM_CORP_ID")
     agent_id = os.getenv("WECOM_AGENT_ID")
     secret = os.getenv("WECOM_SECRET")
     base_url = os.getenv("WECOM_BASE_URL", "https://qyapi.weixin.qq.com").rstrip("/")
+    proxy_url = os.getenv("WECOM_PROXY") or None  # 新增：读取代理地址
 
     if not all([corp_id, agent_id, secret]):
         raise RuntimeError("未完整配置 WECOM_CORP_ID / WECOM_AGENT_ID / WECOM_SECRET")
 
-    # 1. 获取 access_token
-    token_resp = httpx.get(
-        f"{base_url}/cgi-bin/gettoken",
-        params={"corpid": corp_id, "corpsecret": secret},
-        timeout=15.0,
-    )
-    token_resp.raise_for_status()
-    token_data = token_resp.json()
-    access_token = token_data.get("access_token")
-    if not access_token:
-        raise RuntimeError(f"获取企业微信 access_token 失败: {token_data}")
+    with httpx.Client(proxy=proxy_url, timeout=15.0) as client:
+        # 1. 获取 access_token
+        token_resp = client.get(
+            f"{base_url}/cgi-bin/gettoken",
+            params={"corpid": corp_id, "corpsecret": secret},
+        )
+        token_resp.raise_for_status()
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise RuntimeError(f"获取企业微信 access_token 失败: {token_data}")
 
-    # 2. 发送图文卡片消息（@all 发给应用可见范围内的所有人，即你自己）
-    report_date = report.get("reportDate", "")
-    overview = report.get("overview", "今日前沿 AI 深度资讯已更新，点击阅读全文。")
-    count = len(report.get("articles", []))
+        # 2. 发送图文卡片消息
+        report_date = report.get("reportDate", "")
+        overview = report.get("overview", "今日前沿 AI 深度资讯已更新，点击阅读全文。")
+        count = len(report.get("articles", []))
 
-    payload = {
-        "touser": "@all",
-        "msgtype": "news",
-        "agentid": int(agent_id),
-        "news": {
-            "articles": [
-                {
-                    "title": f"AI 每日简报 · {report_date}（精选 {count} 篇）",
-                    "description": overview,
-                    "url": f"{SITE_URL}/",
-                    "picurl": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80",
-                }
-            ]
-        },
-    }
+        payload = {
+            "touser": "@all",
+            "msgtype": "news",
+            "agentid": int(agent_id),
+            "news": {
+                "articles": [
+                    {
+                        "title": f"AI 每日简报 · {report_date}（精选 {count} 篇）",
+                        "description": overview,
+                        "url": f"{SITE_URL}/",
+                        "picurl": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80",
+                    }
+                ]
+            },
+        }
 
-    res = httpx.post(
-        f"{base_url}/cgi-bin/message/send",
-        params={"access_token": access_token},
-        json=payload,
-        timeout=15.0,
-    ).json()
+        res = client.post(
+            f"{base_url}/cgi-bin/message/send",
+            params={"access_token": access_token},
+            json=payload,
+        ).json()
 
     if res.get("errcode") == 0:
         print("[企业微信推送成功] 图文卡片已送达个人微信")
