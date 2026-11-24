@@ -38,6 +38,7 @@ jobs:
           WECOM_AGENT_ID: ${{ secrets.WECOM_AGENT_ID }}
           WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
           WECOM_BASE_URL: ${{ secrets.WECOM_BASE_URL }}
+          WECOM_PROXY: ${{ secrets.WECOM_PROXY }}
         run: |
           python daily_push.py
 
