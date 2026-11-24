@@ -77,7 +77,12 @@ def _fetch_and_translate_one(article: dict) -> None:
     raw_text = ""
     # 1. 优先用 Jina Reader 提取干净正文（无需 Key 也有免费额度）
     try:
-        headers = {"Accept": "text/plain", "X-Return-Format": "markdown"}
+        headers = {
+            "Accept": "text/plain",
+            "X-Return-Format": "markdown",
+            "X-Remove-Selector": "header, nav, footer, aside, [role='navigation'], [role='banner']",
+            "X-Target-Selector": "article, main, .article-body, .uni-blog-article",
+        }
         jina_key = os.getenv("JINA_API_KEY")
         if jina_key:
             headers["Authorization"] = f"Bearer {jina_key}"

@@ -406,10 +406,12 @@ export default {
         if (env.JINA_API_KEY) {
           const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
             headers: {
-              'Accept': 'text/plain',
-              'X-Return-Format': 'markdown',
-              'Authorization': `Bearer ${env.JINA_API_KEY}`
-            }
+          'Accept': 'text/plain',
+          'X-Return-Format': 'markdown',
+          'Authorization': `Bearer ${env.JINA_API_KEY}`,
+          'X-Remove-Selector': "header, nav, footer, aside, [role='navigation'], [role='banner']",
+          'X-Target-Selector': 'article, main, .article-body, .uni-blog-article'
+        }
           });
           if (jinaRes.ok) {
             const md = await jinaRes.text();
