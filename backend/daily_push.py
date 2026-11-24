@@ -321,9 +321,3 @@ if __name__ == "__main__":
         push_to_wecom(report)
     except Exception as e:
         print(f"[企业微信推送失败] {e}")
-
-
-    try:
-        push_to_wecom(report)
-    except Exception as e:
-        print(f"[企业微信推送失败] {e}")

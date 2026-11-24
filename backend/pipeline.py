@@ -158,12 +158,13 @@ def generate_daily_briefing() -> dict:
     )
 
     system_prompt = """你是一位资深 AI 行业情报主编，专门为读者策划高质量的「前沿 AI 深度图文日报」。
-请从用户提供的原始资讯列表中，精选出最有价值的 6 篇文章，严格遵循以下筛选标准：
-1. 优先选择：前沿大模型发布、AI Agent / 多模态 / 具身智能重大突破、官方技术博客深度解读、行业重磅长文报道（内容详实、适合图文深度阅读）。
-2. 尽量过滤：简短快讯、纯公关软文、无实质技术或商业洞察的水文、以及同质化重复报道（同一事件只保留最深度的一篇）。
-3. 严格按照以下 JSON 格式输出（不要包含 Markdown 代码块之外的多余文字）：
+请从用户提供的原始资讯列表中，根据当天实际发生的资讯重要程度**动态筛选**出值得阅读的文章（不限制固定篇数，重要资讯多就多选，少就少选，一般控制在 3~12 篇，宁缺毋滥，但绝不遗漏重大事件），严格遵循以下标准：
+1. 优先保留（综合评分 >= 4.0）：前沿大模型发布、AI Agent / 多模态 / 具身智能重大突破、头部科技公司高管/战略重磅变动、官方技术博客深度解读、行业深度长文报道。
+2. 坚决过滤：简短快讯、纯公关软文、无实质技术或商业洞察的水文、以及同质化重复报道（同一事件只保留最深度的一篇）。
+3. 导读一致性（严格执行）：`overview` 字段只能总结最终入选 `articles` 列表中的文章，严禁在 `overview` 中提及未入选 `articles` 列表的新闻。
+4. 严格按照以下 JSON 格式输出（不要包含 Markdown 代码块之外的多余文字）：
 {
-  "overview": "用 2-3 句中文精炼总结今日 AI 领域最核心的前沿动态与趋势",
+  "overview": "用 2-3 句中文精炼总结最终入选文章中最核心的前沿动态与趋势",
   "articles": [
     {
       "id": "art_001",
@@ -199,6 +200,8 @@ def generate_daily_briefing() -> dict:
 
     # 补全前端需要的完整字段
     articles = result.get("articles", [])
+    articles.sort(key=lambda x: float(x.get("score", 0)), reverse=True)
+    articles = articles[:15]
     for idx, art in enumerate(articles, start=1):
         art["id"] = f"ds_{datetime.now().strftime('%m%d')}_{idx:03d}"
         art["userFeedback"] = None
