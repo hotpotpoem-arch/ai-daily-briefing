@@ -21,6 +21,34 @@ function isAuthorized(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // 图片代理接口：解决国内免代理加载海外配图慢或裂图问题
+    if (url.pathname === '/api/img') {
+      const imgUrl = url.searchParams.get('url');
+      if (!imgUrl || !/^https?:\/\//i.test(imgUrl)) {
+        return new Response('Invalid image URL', { status: 400 });
+      }
+      try {
+        const imgRes = await fetch(imgUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          },
+          redirect: 'follow',
+        });
+        if (!imgRes.ok) {
+          return new Response('Image fetch failed', { status: imgRes.status });
+        }
+        const headers = new Headers(imgRes.headers);
+        headers.set('Cache-Control', 'public, max-age=86400'); // 缓存 24 小时
+        headers.set('Access-Control-Allow-Origin', '*');
+        return new Response(imgRes.body, {
+          status: 200,
+          headers,
+        });
+      } catch (e) {
+        return new Response('Image proxy error', { status: 502 });
+      }
+    }
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -429,6 +457,7 @@ export default {
               .replace(/^## (.*$)/gim, '<h2>$1</h2>')
               .replace(/^# (.*$)/gim, '<h1>$1</h1>')
               .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+              .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_, alt, src) => `<img src="/api/img?url=${encodeURIComponent(src)}" alt="${alt}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:12px 0;" />`)
               .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
               .replace(/\n{2,}/g, '</p><p>')
               .replace(/\n/g, '<br/>') + '</p>';
