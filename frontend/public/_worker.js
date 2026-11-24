@@ -409,7 +409,7 @@ export default {
           'Accept': 'text/plain',
           'X-Return-Format': 'markdown',
           'Authorization': `Bearer ${env.JINA_API_KEY}`,
-          'X-Remove-Selector': "header, nav, footer, aside, [role='navigation'], [role='banner']",
+          "X-Remove-Selector": "header, nav, footer, aside, [role='navigation'], [role='banner'], [class*='ad-'], [class*='ads'], [class*='login'], [class*='signin'], [class*='signup'], [class*='subscribe'], [class*='newsletter'], [class*='cookie'], [class*='share'], [class*='social'], [class*='related'], [class*='recommend'], [class*='comment'], [class*='paywall'], [id*='ad'], [id*='cookie']",
           'X-Target-Selector': 'article, main, .article-body, .uni-blog-article'
         }
           });
