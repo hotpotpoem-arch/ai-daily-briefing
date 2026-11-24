@@ -347,7 +347,7 @@ export default {
   <div class="container">
     <div class="top-bar">
       <a href="javascript:history.back()">← 返回简报</a>
-      <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
+      
     </div>
     <article>
       <h1>${escapeHtml(cachedTitle)}</h1>
@@ -557,7 +557,7 @@ export default {
   <div class="container">
     <div class="top-bar">
       <a href="javascript:history.back()">← 返回简报</a>
-      <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
+      
     </div>
     <div id="trans-bar" class="trans-bar" style="display:none;">
       <span id="trans-status">正在 AI 精准翻译为中文...</span>
