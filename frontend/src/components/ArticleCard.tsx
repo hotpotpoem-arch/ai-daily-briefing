@@ -17,7 +17,7 @@ function renderMarkdown(md: string): string {
   const inline = (s: string) =>
     esc(s)
       .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_, alt, src) =>
-        `<img src="${src}" alt="${alt}" loading="lazy" class="my-4 max-w-full rounded-lg mx-auto block" />`
+        `<img src="/api/img?url=${encodeURIComponent(src)}" alt="${alt}" loading="lazy" onerror="this.style.display='none'" class="my-4 max-w-full rounded-lg mx-auto block shadow-sm" />`
       )
       .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-slate-900">$1</strong>')
       .replace(/`([^`]+)`/g, '<code class="rounded bg-slate-100 px-1.5 py-0.5 text-[13px] font-mono text-slate-800">$1</code>')

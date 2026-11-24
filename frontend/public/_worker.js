@@ -66,6 +66,29 @@ export default {
       }
     }
 
+    // 图片中转代理（解决国内直连外网图床裂图/加载慢）
+    if (url.pathname === '/api/img' && request.method === 'GET') {
+      const imgUrl = url.searchParams.get('url');
+      if (!imgUrl || !/^https?:\/\//i.test(imgUrl)) {
+        return new Response('Invalid URL', { status: 400 });
+      }
+      try {
+        const res = await fetch(imgUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': '' // 清除 Referer，绕过部分外网防盗链
+          },
+          cf: { cacheTtl: 86400, cacheEverything: true }
+        });
+        const headers = new Headers(res.headers);
+        headers.set('Cache-Control', 'public, max-age=86400');
+        headers.set('Access-Control-Allow-Origin', '*');
+        return new Response(res.body, { status: res.status, headers });
+      } catch {
+        return new Response('Image load failed', { status: 502 });
+      }
+    }
+
     // 2. 获取个性化重排后的简报
     if (url.pathname === '/api/briefing' && request.method === 'GET') {
       try {
