@@ -134,6 +134,7 @@ export default {
             sourceName: row.source_name,
             score: Number(row.score || 4.5),
             userFeedback: feedbackMap[row.id] || null,
+            contentZh: row.content_zh || '',
             _rankScore: Number(row.score || 4.5) + boost,
           };
         });

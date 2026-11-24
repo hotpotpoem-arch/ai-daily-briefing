@@ -10,6 +10,7 @@ export interface ArticleItem {
   sourceName: string;
   score: number; // AI 初筛评分 (1-5)
   userFeedback?: FeedbackAction;
+  contentZh?: string;
 }
 
 export interface DailyReport {
