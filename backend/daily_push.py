@@ -8,7 +8,7 @@ from pipeline import generate_daily_briefing
 
 load_dotenv()
 
-SITE_URL = "https://ai-daily-briefing-543.pages.dev"
+SITE_URL = "https://dailypush.dpdns.org"
 
 def push_to_wecom(report: dict) -> None:
     """通过企业微信自建应用发送图文卡片到个人微信（支持静态 IP 代理）"""
