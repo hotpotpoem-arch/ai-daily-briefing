@@ -65,6 +65,102 @@ def push_to_wecom(report: dict) -> None:
     else:
         raise RuntimeError(f"企业微信推送失败: {res}")
 
+import re
+from concurrent.futures import ThreadPoolExecutor
+
+def _fetch_and_translate_one(article: dict) -> None:
+    """抓取单篇文章正文并调用 DeepSeek 预翻译为中文 Markdown"""
+    url = article.get("url", "")
+    if not url:
+        return
+
+    raw_text = ""
+    # 1. 优先用 Jina Reader 提取干净正文（无需 Key 也有免费额度）
+    try:
+        headers = {"Accept": "text/plain", "X-Return-Format": "markdown"}
+        jina_key = os.getenv("JINA_API_KEY")
+        if jina_key:
+            headers["Authorization"] = f"Bearer {jina_key}"
+        r = httpx.get(f"https://r.jina.ai/{url}", headers=headers, timeout=25.0, follow_redirects=True)
+        if r.status_code == 200 and len(r.text.strip()) > 200:
+            raw_text = r.text.strip()
+    except Exception:
+        pass
+
+    # 2. 兜底：直接抓网页并去标签
+    if not raw_text:
+        try:
+            r = httpx.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                timeout=20.0,
+                follow_redirects=True,
+            )
+            if r.status_code == 200:
+                html = re.sub(r"<(script|style|nav|header|footer|aside|noscript)[^>]*>[\s\S]*?</\1>", "", r.text, flags=re.I)
+                raw_text = re.sub(r"<[^>]+>", "\n", html)
+                raw_text = re.sub(r"\n{3,}", "\n\n", raw_text).strip()
+        except Exception as e:
+            print(f"[预翻译跳过] 抓取失败 {url}: {e}")
+            return
+
+    if len(raw_text) < 100:
+        return
+
+    # 如果本来就是中文文章，直接保存
+    cn_chars = len(re.findall(r"[\u4e00-\u9fa5]", raw_text))
+    en_chars = len(re.findall(r"[a-zA-Z]", raw_text))
+    if en_chars <= cn_chars * 2:
+        article["contentZh"] = raw_text[:15000]
+        return
+
+    # 3. 调用 DeepSeek 翻译为中文 Markdown
+    api_key = os.getenv("LLM_API_KEY")
+    if not api_key:
+        return
+    base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
+    model = os.getenv("LLM_MODEL", "deepseek-chat")
+
+    try:
+        resp = httpx.post(
+            f"{base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "temperature": 0.2,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是一位精通人工智能、计算机科学与科技新闻的专业中英译者。请将用户提供的文章正文准确、流畅地翻译为简体中文。\n"
+                            "要求：\n"
+                            "1. 严格忠实原文，不遗漏关键数据、实验结论与技术细节，不擅自发挥。\n"
+                            "2. 保留常见专业英文术语（如 LLM、Agent、Transformer、Benchmark、API、Fine-tuning 等）或采用业内通用译法。\n"
+                            "3. 保持原有的段落与小标题结构，使用简洁的 Markdown（如 ## 标题、加粗、列表）输出，不要输出任何开场白或解释，也不要重复输出文章主标题。"
+                        ),
+                    },
+                    {"role": "user", "content": raw_text[:12000]},
+                ],
+            },
+            timeout=90.0,
+        )
+        resp.raise_for_status()
+        translated = resp.json()["choices"][0]["message"]["content"].strip()
+        if translated:
+            article["contentZh"] = translated
+            print(f"[预翻译成功] {article.get('title', '')[:30]}")
+    except Exception as e:
+        print(f"[预翻译失败] {article.get('title', '')[:30]}: {e}")
+
+
+def pretranslate_articles(report: dict) -> None:
+    """并发预翻译当日入选文章，供纯享模式秒开"""
+    articles = report.get("articles", [])
+    if not articles:
+        return
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        list(executor.map(_fetch_and_translate_one, articles))
+
 def export_static_json(report: dict) -> None:
     """将简报按日期归档导出到前端静态目录（作为兜底备份）"""
     project_root = Path(__file__).resolve().parent.parent
@@ -198,16 +294,23 @@ def push_to_wechat(report: dict) -> None:
 
 
 if __name__ == "__main__":
-    print("[1/4] 正在抓取并调用 DeepSeek 生成今日简报...")
+    print("[1/5] 正在抓取并调用 DeepSeek 生成今日简报...")
     report = generate_daily_briefing()
 
-    print("[2/4] 正在导出静态 JSON 备份...")
+    print("[2/5] 正在后台预抓取并翻译纯享中文正文...")
+    pretranslate_articles(report)
+
+    print("[3/5] 正在导出静态 JSON 备份...")
     export_static_json(report)
 
-    print("[3/4] 正在写入 Cloudflare D1 公共文章池...")
+    print("[4/5] 正在写入 Cloudflare D1 公共文章池...")
     ingest_to_d1(report)
 
-    print("[4/4] 正在推送企业微信图文卡片...")
+    print("[5/5] 正在推送企业微信图文卡片...")
+    try:
+        push_to_wecom(report)
+    except Exception as e:
+        print(f"[企业微信推送失败] {e}")
 
 
     try:

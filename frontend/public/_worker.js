@@ -174,8 +174,8 @@ export default {
 
         const stmts = articles.map((art) =>
           env.DB.prepare(
-            `INSERT INTO articles (id, report_date, category, title, tldr, tags, url, source_name, score, overview)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO articles (id, report_date, category, title, tldr, tags, url, source_name, score, overview, content_zh)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(
             art.id,
             reportDate,
@@ -186,7 +186,8 @@ export default {
             art.url || '',
             art.sourceName || '',
             Number(art.score || 4.5),
-            overview || ''
+            overview || '',
+            art.contentZh || ''
           )
         );
         if (stmts.length > 0) await env.DB.batch(stmts);
@@ -279,6 +280,103 @@ export default {
       const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       let title = '纯享阅读';
       let articleHtml = '';
+      // 优先从 D1 读取预翻译好的中文正文（秒开，无需等待）
+      try {
+        const cached = await env.DB.prepare(
+          'SELECT title, content_zh FROM articles WHERE url = ? AND content_zh IS NOT NULL AND content_zh != "" ORDER BY report_date DESC LIMIT 1'
+        ).bind(targetUrl).first();
+
+        if (cached && cached.content_zh) {
+          const cachedTitle = cached.title || '纯享阅读';
+          const renderMdServer = (md) => {
+            const inline = (s) => escapeHtml(s)
+              .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+              .replace(/`([^`]+)`/g, '<code>$1</code>')
+              .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+            const lines = md.split(/\r?\n/);
+            let html = '', inUl = false, inOl = false;
+            const closeLists = () => {
+              if (inUl) { html += '</ul>'; inUl = false; }
+              if (inOl) { html += '</ol>'; inOl = false; }
+            };
+            for (const raw of lines) {
+              const line = raw.trim();
+              if (!line) { closeLists(); continue; }
+              if (/^###\s+/.test(line)) { closeLists(); html += '<h3>' + inline(line.replace(/^###\s+/, '')) + '</h3>'; }
+              else if (/^##\s+/.test(line)) { closeLists(); html += '<h2>' + inline(line.replace(/^##\s+/, '')) + '</h2>'; }
+              else if (/^#\s+/.test(line)) { closeLists(); html += '<h1>' + inline(line.replace(/^#\s+/, '')) + '</h1>'; }
+              else if (/^>\s*/.test(line)) { closeLists(); html += '<blockquote>' + inline(line.replace(/^>\s*/, '')) + '</blockquote>'; }
+              else if (/^[-*]\s+/.test(line)) {
+                if (inOl) { html += '</ol>'; inOl = false; }
+                if (!inUl) { html += '<ul>'; inUl = true; }
+                html += '<li>' + inline(line.replace(/^[-*]\s+/, '')) + '</li>';
+              } else if (/^\d+\.\s+/.test(line)) {
+                if (inUl) { html += '</ul>'; inUl = false; }
+                if (!inOl) { html += '<ol>'; inOl = true; }
+                html += '<li>' + inline(line.replace(/^\d+\.\s+/, '')) + '</li>';
+              } else { closeLists(); html += '<p>' + inline(line) + '</p>'; }
+            }
+            closeLists();
+            return html;
+          };
+
+          const instantHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>${escapeHtml(cachedTitle)} - 纯享阅读</title>
+  <style>
+    html, body { -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; margin: 0; padding: 0; background: #f5f5f4; color: #1c1917; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; }
+    .container { max-width: 680px; margin: 0 auto; min-height: 100vh; background: #ffffff; padding: 16px 20px 64px; box-sizing: border-box; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid #f0f0ef; font-size: 14px; }
+    .top-bar a { color: #2563eb; text-decoration: none; font-weight: 500; }
+    article { font-size: 15px; line-height: 1.85; letter-spacing: 0.02em; word-break: break-word; }
+    article h1 { font-size: 20px; line-height: 1.4; font-weight: 700; margin: 8px 0 20px; color: #111827; }
+    article h2 { font-size: 16px; line-height: 1.45; font-weight: 600; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #f3f4f6; color: #111827; }
+    article h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; color: #374151; }
+    article p { margin: 0 0 14px; text-align: justify; }
+    article ul, article ol { margin: 0 0 16px; padding-left: 22px; }
+    article li { margin-bottom: 8px; }
+    article blockquote { margin: 16px 0; padding: 10px 14px; background: #f9fafb; border-left: 3px solid #2563eb; color: #4b5563; border-radius: 0 6px 6px 0; }
+    article pre, article code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    article a { color: #2563eb; text-decoration: none; border-bottom: 1px solid #bfdbfe; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top-bar">
+      <a href="javascript:history.back()">← 返回简报</a>
+      <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
+    </div>
+    <article>
+      <h1>${escapeHtml(cachedTitle)}</h1>
+      ${renderMdServer(cached.content_zh)}
+    </article>
+  </div>
+  <script>
+    (function() {
+      function lockFontSize() {
+        WeixinJSBridge.invoke('setFontSizeCallback', { 'fontSize': 0 });
+        WeixinJSBridge.on('menu:setfont', function() { WeixinJSBridge.invoke('setFontSizeCallback', { 'fontSize': 0 }); });
+      }
+      if (typeof WeixinJSBridge === 'object' && typeof WeixinJSBridge.invoke === 'function') lockFontSize();
+      else document.addEventListener('WeixinJSBridgeReady', lockFontSize, false);
+    })();
+  </script>
+</body>
+</html>`;
+
+          return new Response(instantHtml, {
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Cache-Control': 'public, max-age=3600'
+            }
+          });
+        }
+      } catch (e) {
+        console.error('读取 D1 预翻译缓存失败，降级为实时抓取:', e);
+      }
 
       try {
         if (env.JINA_API_KEY) {
