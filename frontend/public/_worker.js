@@ -273,7 +273,7 @@ export default {
                   messages: [
                     {
                       role: 'system',
-                      content: '将用户的阅读偏好描述拆解为中英文关键词数组，方便做文章标题和摘要的文本匹配。严格输出 JSON：{"like": ["词1", "word1"], "dislike": ["词2", "word2"]}。每个词尽量简短精准，同时包含常见中英文写法（如 "英伟达" 和 "Nvidia"）。',
+                      content: '将用户的阅读偏好拆解为精准的中英文匹配关键词数组，严格输出 JSON：{"like": ["词1", "word1"], "dislike": ["词2", "word2"]}。要求：1. 只保留用户明确提到的实体、品牌、细分技术及直接同义词（如 "英伟达" 只提取 ["英伟达", "Nvidia", "黄仁勋", "CUDA"]）；2. 严禁发散出 "AI"、"人工智能"、"科技"、"大模型"、"深度学习" 这类过于宽泛的行业通用词，除非用户明确指定。',
                     },
                     { role: 'user', content: prefText },
                   ],
@@ -490,14 +490,24 @@ export default {
           if (row.target_uid === uid) {
             boost += 2.0;
           }
+
+          const matchKw = (text, kw) => {
+            if (!kw) return false;
+            // 纯英文短词按完整单词匹配，避免 "ai" 误命中 "daily"、"main"
+            if (/^[a-z0-9]+$/i.test(kw) && kw.length <= 4) {
+              return new RegExp(`\\b${kw}\\b`, 'i').test(text);
+            }
+            return text.includes(kw);
+          };
+
           for (const kw of likeKws) {
-            if (kw && searchText.includes(kw)) {
+            if (matchKw(searchText, kw)) {
               boost += 1.2;
               matchedPref = true;
             }
           }
           for (const kw of dislikeKws) {
-            if (kw && searchText.includes(kw)) {
+            if (matchKw(searchText, kw)) {
               boost -= 1.0;
               matchedDislike = true;
             }
