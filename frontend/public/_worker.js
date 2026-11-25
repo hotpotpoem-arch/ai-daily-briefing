@@ -26,9 +26,13 @@ function isAuthorized(request, env) {
  * 根据用户偏好关键词，实时抓取 Bing News RSS（自动提取真实原文链接）并由 DeepSeek 质检打分
  */
 async function fetchPersonalizedNews(likeKws, prefText, env) {
-  if (!likeKws || likeKws.length === 0 || !env.LLM_API_KEY) return [];
+  const debug = { step: 'init', rssStatuses: [], rawCount: 0, llmStatus: null, err: null };
+  if (!likeKws || likeKws.length === 0 || !env.LLM_API_KEY) {
+    debug.step = 'missing_params';
+    return { articles: [], debug };
+  }
 
-  // 1. 构造更合理的搜索词（用 OR 避免同时命中多个词导致无结果）
+  // 1. 构造搜索词并依次尝试 RSS 源
   const query = encodeURIComponent(likeKws.slice(0, 2).join(' OR '));
   const rssUrls = [
     `https://www.bing.com/news/search?q=${query}&format=rss&mkt=zh-CN`,
@@ -43,18 +47,23 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
       });
-      if (rssRes.ok) {
-        const text = await rssRes.text();
-        if (text.includes('<item>')) {
-          xmlText = text;
-          break;
-        }
+      const text = await rssRes.text();
+      const hasItem = text.includes('<item>');
+      debug.rssStatuses.push({ url: rssUrl.slice(0, 35), status: rssRes.status, len: text.length, hasItem });
+      if (rssRes.ok && hasItem) {
+        xmlText = text;
+        break;
       }
-    } catch {}
+    } catch (e) {
+      debug.rssStatuses.push({ url: rssUrl.slice(0, 35), err: e.message });
+    }
   }
-  if (!xmlText) return [];
+  if (!xmlText) {
+    debug.step = 'rss_empty';
+    return { articles: [], debug };
+  }
 
-  // 2. 解析 RSS：提取标题、摘要、真实原文 URL 和来源
+  // 2. 解析 RSS
   const rawItems = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
   let match;
@@ -64,31 +73,18 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
       block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)?.[1] ||
       block.match(/<title>([\s\S]*?)<\/title>/)?.[1] ||
       ''
-    )
-      .replace(/&amp;/g, '&')
-      .replace(/&quot;/g, '"')
-      .trim();
+    ).replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim();
 
     const desc = (
       block.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)?.[1] ||
       block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ||
       ''
-    )
-      .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&')
-      .replace(/&quot;/g, '"')
-      .trim()
-      .slice(0, 200);
+    ).replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim().slice(0, 200);
 
-    const rawLink = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '')
-      .replace(/&amp;/g, '&')
-      .trim();
-
-    // 从 Bing 跳转链接中提取真实原文 URL
+    const rawLink = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '').replace(/&amp;/g, '&').trim();
     let realUrl = rawLink;
     try {
-      const parsedUrl = new URL(rawLink);
-      const extracted = parsedUrl.searchParams.get('url');
+      const extracted = new URL(rawLink).searchParams.get('url');
       if (extracted) realUrl = extracted;
     } catch {}
 
@@ -102,9 +98,13 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
       rawItems.push({ title, snippet: desc, url: realUrl, sourceName: source });
     }
   }
-  if (rawItems.length === 0) return [];
+  debug.rawCount = rawItems.length;
+  if (rawItems.length === 0) {
+    debug.step = 'parse_empty';
+    return { articles: [], debug };
+  }
 
-  // 3. 交给 DeepSeek 质检并生成中文摘要
+  // 3. DeepSeek 质检
   const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
   try {
     const llmRes = await fetch(`${baseUrl}/chat/completions`, {
@@ -138,25 +138,31 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
   ]
 }`,
           },
-          {
-            role: 'user',
-            content: JSON.stringify(rawItems),
-          },
+          { role: 'user', content: JSON.stringify(rawItems) },
         ],
       }),
     });
 
-    if (!llmRes.ok) return [];
+    debug.llmStatus = llmRes.status;
+    if (!llmRes.ok) {
+      debug.step = 'llm_http_error';
+      debug.err = (await llmRes.text()).slice(0, 200);
+      return { articles: [], debug };
+    }
     const llmData = await llmRes.json();
     const parsed = JSON.parse(llmData.choices?.[0]?.message?.content || '{}');
-    return Array.isArray(parsed.articles)
+    const filtered = Array.isArray(parsed.articles)
       ? parsed.articles.filter((a) => Number(a.score) >= 3.8)
       : [];
-  } catch {
-    return [];
+    debug.step = 'done';
+    debug.llmReturned = parsed.articles?.length || 0;
+    return { articles: filtered, debug };
+  } catch (e) {
+    debug.step = 'llm_exception';
+    debug.err = e.message;
+    return { articles: [], debug };
   }
 }
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -307,6 +313,7 @@ export default {
 
           // 实时全网搜索并质检专属高质量资讯，写入当天简报
           let addedCount = 0;
+          let fetchDebug = null;
           if (likeKeywords.length > 0) {
             const latestRow = await env.DB.prepare(
               `SELECT report_date FROM articles ORDER BY report_date DESC LIMIT 1`
@@ -314,7 +321,9 @@ export default {
 
             if (latestRow?.report_date) {
               const targetDate = latestRow.report_date;
-              const newArticles = await fetchPersonalizedNews(likeKeywords, prefText, env);
+              const result = await fetchPersonalizedNews(likeKeywords, prefText, env);
+              const newArticles = result.articles;
+              fetchDebug = result.debug;
 
               // 先清理该用户当天旧的专属搜索文章，再写入新的
               await env.DB.prepare(
@@ -345,7 +354,7 @@ export default {
             }
           }
 
-          return jsonResp({ ok: true, uid: targetUid, prefText, likeKeywords, dislikeKeywords, addedCount });
+          return jsonResp({ ok: true, uid: targetUid, prefText, likeKeywords, dislikeKeywords, addedCount, fetchDebug });
         } catch (err) {
           return jsonResp({ error: err.message }, 500);
         }
