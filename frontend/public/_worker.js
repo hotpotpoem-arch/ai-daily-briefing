@@ -18,6 +18,34 @@ function isAuthorized(request, env) {
   return request.headers.get('Authorization') === `Bearer ${secret}`;
 }
 
+// 常见硬付费墙与强反爬域名（纯享模式无法提取正文，抓取时直接过滤）
+const BLOCKED_DOMAINS = [
+  'ft.com', 'wsj.com', 'bloomberg.com', 'nytimes.com', 'economist.com',
+  'theinformation.com', 'barrons.com', 'seekingalpha.com', 'techpowerup.com',
+  'reuters.com', 'washingtonpost.com', 'newyorker.com', 'wired.com', 'medium.com'
+];
+
+function isBlockedUrl(urlStr) {
+  try {
+    const host = new URL(urlStr).hostname.toLowerCase();
+    return BLOCKED_DOMAINS.some((d) => host === d || host.endsWith('.' + d));
+  } catch {
+    return true;
+  }
+}
+
+function isBlockedContent(text) {
+  if (!text || text.trim().length < 180) return true;
+  const sample = text.slice(0, 1500).toLowerCase();
+  const patterns = [
+    /automated bot check|verify you are human|are you a robot|drag the handle|captcha|access denied/i,
+    /subscribe to unlock|try unlimited access|subscribe to read|paywall|already a subscriber/i,
+    /please enable javascript|enable cookies|checking your browser|just a moment\.\.\./i,
+    /自动机器人检查|人机验证|订阅以解锁|订阅后阅读|请开启\s*javascript/i,
+  ];
+  return patterns.some((re) => re.test(sample));
+}
+
 /**
  * 根据用户偏好关键词，实时抓取 Hacker News & GDELT 资讯并由 DeepSeek 质检打分与翻译
  */
@@ -44,7 +72,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
       debug.sources.push({ name: 'hn', status: hnRes.status, count: hits.length });
       for (const h of hits) {
         const url = h.url || `https://news.ycombinator.com/item?id=${h.objectID}`;
-        if (h.title && !seenUrls.has(url)) {
+        if (h.title && !seenUrls.has(url) && !isBlockedUrl(url)) {
           seenUrls.add(url);
           rawItems.push({
             title: h.title,
@@ -70,7 +98,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
       const arts = gdData.articles || [];
       debug.sources.push({ name: 'gdelt', status: gdRes.status, count: arts.length });
       for (const a of arts) {
-        if (a.title && a.url && !seenUrls.has(a.url)) {
+        if (a.title && a.url && !seenUrls.has(a.url) && !isBlockedUrl(a.url)) {
           seenUrls.add(a.url);
           rawItems.push({
             title: a.title,
@@ -141,7 +169,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     const llmData = await llmRes.json();
     const parsed = JSON.parse(llmData.choices?.[0]?.message?.content || '{}');
     const filtered = Array.isArray(parsed.articles)
-      ? parsed.articles.filter((a) => Number(a.score) >= 3.8)
+      ? parsed.articles.filter((a) => Number(a.score) >= 3.8 && !isBlockedUrl(a.url))
       : [];
     debug.step = 'done';
     debug.llmReturned = parsed.articles?.length || 0;
@@ -157,7 +185,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
  * 后台抓取单篇专属文章正文，调用 DeepSeek 预翻译并写入 D1 的 content_zh 缓存
  */
 async function pretranslateSingleArticle(artId, targetUrl, env) {
-  if (!artId || !targetUrl) return;
+  if (!artId || !targetUrl || isBlockedUrl(targetUrl)) return;
   let rawText = '';
 
   // 1. 优先通过 Jina Reader 提取纯净 Markdown 正文
@@ -174,7 +202,7 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
     const r = await fetch(`https://r.jina.ai/${targetUrl}`, { headers });
     if (r.ok) {
       const txt = (await r.text()).trim();
-      if (txt.length > 200) rawText = txt;
+      if (!isBlockedContent(txt)) rawText = txt;
     }
   } catch {}
 
@@ -193,7 +221,7 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
     } catch {}
   }
 
-  if (rawText.length < 100) return;
+  if (isBlockedContent(rawText)) return;
 
   // 若原文以中文为主，直接缓存
   const cnChars = (rawText.match(/[\u4e00-\u9fa5]/g) || []).length;
@@ -232,7 +260,7 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
     } catch {}
   }
 
-  if (contentZh) {
+  if (contentZh && !isBlockedContent(contentZh)) {
     try {
       await env.DB.prepare('UPDATE articles SET content_zh = ? WHERE id = ?')
         .bind(contentZh, artId)
@@ -750,7 +778,7 @@ export default {
       }
     }
 
-    // 7. AI 精准翻译接口（供纯享页异步调用，并顺手回写 D1 缓存）
+    // 7. AI 精准翻译接口（供纯享页异步调用，并顺手回写有效 D1 缓存）
     if (url.pathname === '/api/translate' && request.method === 'POST') {
       try {
         if (!env.LLM_API_KEY) {
@@ -799,7 +827,7 @@ export default {
         const translated = data?.choices?.[0]?.message?.content?.trim();
         if (!translated) throw new Error('模型未返回有效译文');
 
-        if (articleUrl) {
+        if (articleUrl && !isBlockedContent(translated)) {
           const savePromise = env.DB.prepare(
             'UPDATE articles SET content_zh = ? WHERE url = ? AND (content_zh IS NULL OR content_zh = "")'
           ).bind(translated, articleUrl).run().catch(() => {});
@@ -828,13 +856,13 @@ export default {
       let title = '纯享阅读';
       let articleHtml = '';
 
-      // 优先从 D1 读取预翻译好的中文正文（秒开，无需等待）
+      // 优先从 D1 读取有效的预翻译中文正文（秒开，且跳过误存的拦截页缓存）
       try {
         const cached = await env.DB.prepare(
           'SELECT title, content_zh FROM articles WHERE url = ? AND content_zh IS NOT NULL AND content_zh != "" ORDER BY report_date DESC LIMIT 1'
         ).bind(targetUrl).first();
 
-        if (cached && cached.content_zh) {
+        if (cached && cached.content_zh && !isBlockedContent(cached.content_zh)) {
           const cachedTitle = cached.title || '纯享阅读';
           const renderMdServer = (md) => {
             const inline = (s) => escapeHtml(s)
@@ -897,6 +925,7 @@ export default {
   <div class="container">
     <div class="top-bar">
       <a href="javascript:history.back()">← 返回简报</a>
+      <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
     </div>
     <article>
       <h1>${escapeHtml(cachedTitle)}</h1>
@@ -928,39 +957,44 @@ export default {
       }
 
       try {
-        if (env.JINA_API_KEY) {
-          const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
-            headers: {
-              'Accept': 'text/plain',
-              'X-Return-Format': 'markdown',
-              'Authorization': `Bearer ${env.JINA_API_KEY}`,
-              'X-Remove-Selector': "header, nav, footer, aside, [role='navigation'], [role='banner'], [class*='ad-'], [class*='ads'], [class*='login'], [class*='signin'], [class*='signup'], [class*='subscribe'], [class*='newsletter'], [class*='cookie'], [class*='share'], [class*='social'], [class*='related'], [class*='recommend'], [class*='comment'], [class*='paywall'], [id*='ad'], [id*='cookie']",
-              'X-Target-Selector': 'article, main, .article-body, .uni-blog-article',
-            },
-          });
+        // 1. 优先尝试通过 Jina Reader 提取正文（有 Key 自动携带，无 Key 走免费额度）
+        try {
+          const jinaHeaders = {
+            'Accept': 'text/plain',
+            'X-Return-Format': 'markdown',
+            'X-Remove-Selector': "header, nav, footer, aside, [role='navigation'], [role='banner'], [class*='ad-'], [class*='ads'], [class*='login'], [class*='signin'], [class*='signup'], [class*='subscribe'], [class*='newsletter'], [class*='cookie'], [class*='share'], [class*='social'], [class*='related'], [class*='recommend'], [class*='comment'], [class*='paywall'], [id*='ad'], [id*='cookie']",
+            'X-Target-Selector': 'article, main, .article-body, .uni-blog-article',
+          };
+          if (env.JINA_API_KEY) {
+            jinaHeaders['Authorization'] = `Bearer ${env.JINA_API_KEY}`;
+          }
+          const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, { headers: jinaHeaders });
           if (jinaRes.ok) {
             const rawMd = await jinaRes.text();
-            const md = rawMd
-              .split('\n')
-              .filter((line) => {
-                const trimmed = line.trim();
-                if (/^[-*•]\s*\[.*?\]\(https?:\/\/.*?\)$/.test(trimmed)) return false;
-                if (/^(Sign in|Log in|Sign up|Subscribe|Accept all cookies|Share this|Related articles)/i.test(trimmed)) return false;
-                return true;
-              })
-              .join('\n');
-            articleHtml = '<p>' + escapeHtml(md)
-              .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-              .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-              .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-              .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_, alt, src) => `<img src="/api/img?url=${encodeURIComponent(src)}" alt="${alt}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:12px 0;" />`)
-              .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-              .replace(/\n{2,}/g, '</p><p>')
-              .replace(/\n/g, '<br/>') + '</p>';
+            if (!isBlockedContent(rawMd)) {
+              const md = rawMd
+                .split('\n')
+                .filter((line) => {
+                  const trimmed = line.trim();
+                  if (/^[-*•]\s*\[.*?\]\(https?:\/\/.*?\)$/.test(trimmed)) return false;
+                  if (/^(Sign in|Log in|Sign up|Subscribe|Accept all cookies|Share this|Related articles)/i.test(trimmed)) return false;
+                  return true;
+                })
+                .join('\n');
+              articleHtml = '<p>' + escapeHtml(md)
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_, alt, src) => `<img src="/api/img?url=${encodeURIComponent(src)}" alt="${alt}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:12px 0;" />`)
+                .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+                .replace(/\n{2,}/g, '</p><p>')
+                .replace(/\n/g, '<br/>') + '</p>';
+            }
           }
-        }
+        } catch {}
 
+        // 2. 兜底：直连抓取原文并清洗标签
         if (!articleHtml) {
           const res = await fetch(targetUrl, {
             headers: {
@@ -992,6 +1026,15 @@ export default {
             .trim();
 
           articleHtml = `<h1>${escapeHtml(title)}</h1>` + body;
+        }
+
+        // 3. 若命中反爬/付费墙，直接提示前往原网页阅读，避免送去翻译
+        const plainCheck = articleHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (isBlockedContent(plainCheck)) {
+          return new Response(
+            `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>需访问原文 - 纯享阅读</title></head><body style="font-family:-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:20px;line-height:1.7;color:#1f2937;"><a href="javascript:history.back()" style="color:#2563eb;text-decoration:none;">← 返回简报</a><div style="margin-top:24px;padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;"><h3 style="margin:0 0 8px;">该网站开启了付费墙或人机验证</h3><p style="margin:0 0 16px;font-size:14px;color:#6b7280;">纯享模式无法自动提取正文内容，建议直接前往原网页阅读。</p><a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">前往原网页阅读 ↗</a></div></body></html>`,
+            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
         }
 
         const pageHtml = `<!DOCTYPE html>
@@ -1118,6 +1161,7 @@ export default {
   <div class="container">
     <div class="top-bar">
       <a href="javascript:history.back()">← 返回简报</a>
+      <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">查看原文 ↗</a>
     </div>
     <div id="trans-bar" class="trans-bar" style="display:none;">
       <span id="trans-status">正在 AI 精准翻译为中文...</span>
@@ -1269,7 +1313,7 @@ export default {
         });
       } catch (err) {
         return new Response(
-          `<html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px;line-height:1.6;"><h3>纯享解析失败</h3><p>${escapeHtml(err.message)}</p></body></html>`,
+          `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>纯享解析失败</title></head><body style="font-family:-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:20px;line-height:1.7;color:#1f2937;"><a href="javascript:history.back()" style="color:#2563eb;text-decoration:none;">← 返回简报</a><div style="margin-top:24px;padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;"><h3 style="margin:0 0 8px;">纯享解析失败</h3><p style="margin:0 0 16px;font-size:14px;color:#6b7280;">${escapeHtml(err.message)}</p><a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">前往原网页阅读 ↗</a></div></body></html>`,
           { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
       }
