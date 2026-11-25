@@ -18,12 +18,8 @@ function isAuthorized(request, env) {
   return request.headers.get('Authorization') === `Bearer ${secret}`;
 }
 
-
 /**
- * 根据用户偏好关键词，实时抓取 Google News RSS 并由 DeepSeek 质检打分与翻译
- */
-/**
- * 根据用户偏好关键词，实时抓取 Bing News RSS（自动提取真实原文链接）并由 DeepSeek 质检打分
+ * 根据用户偏好关键词，实时抓取 Hacker News & GDELT 资讯并由 DeepSeek 质检打分与翻译
  */
 async function fetchPersonalizedNews(likeKws, prefText, env) {
   const debug = { step: 'init', sources: [], rawCount: 0, llmStatus: null, err: null };
@@ -156,8 +152,97 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     return { articles: [], debug };
   }
 }
+
+/**
+ * 后台抓取单篇专属文章正文，调用 DeepSeek 预翻译并写入 D1 的 content_zh 缓存
+ */
+async function pretranslateSingleArticle(artId, targetUrl, env) {
+  if (!artId || !targetUrl) return;
+  let rawText = '';
+
+  // 1. 优先通过 Jina Reader 提取纯净 Markdown 正文
+  try {
+    const headers = {
+      'Accept': 'text/plain',
+      'X-Return-Format': 'markdown',
+      'X-Remove-Selector': "header, nav, footer, aside, [role='navigation'], [role='banner']",
+      'X-Target-Selector': 'article, main, .article-body',
+    };
+    if (env.JINA_API_KEY) {
+      headers['Authorization'] = `Bearer ${env.JINA_API_KEY}`;
+    }
+    const r = await fetch(`https://r.jina.ai/${targetUrl}`, { headers });
+    if (r.ok) {
+      const txt = (await r.text()).trim();
+      if (txt.length > 200) rawText = txt;
+    }
+  } catch {}
+
+  // 2. 兜底：直接抓取原文并清除无关标签
+  if (!rawText) {
+    try {
+      const r = await fetch(targetUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        redirect: 'follow',
+      });
+      if (r.ok) {
+        const html = (await r.text())
+          .replace(/<(script|style|nav|header|footer|aside|noscript)[^>]*>[\s\S]*?<\/\1>/gi, '');
+        rawText = html.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+      }
+    } catch {}
+  }
+
+  if (rawText.length < 100) return;
+
+  // 若原文以中文为主，直接缓存
+  const cnChars = (rawText.match(/[\u4e00-\u9fa5]/g) || []).length;
+  const enChars = (rawText.match(/[a-zA-Z]/g) || []).length;
+  let contentZh = '';
+
+  if (enChars <= cnChars * 2) {
+    contentZh = rawText.slice(0, 15000);
+  } else if (env.LLM_API_KEY) {
+    // 3. 调用 DeepSeek 清洗并翻译为中文 Markdown
+    const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+    try {
+      const llmRes = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${env.LLM_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: env.LLM_MODEL || 'deepseek-chat',
+          temperature: 0.2,
+          messages: [
+            {
+              role: 'system',
+              content:
+                '你是一位精通人工智能与科技新闻的专业中英译者。请将文章正文准确、流畅地翻译为简体中文 Markdown，严格保留原文数据、结论、小标题结构与正文配图 ![说明](URL)；彻底删除导航栏、登录注册、广告、Cookie 声明、评论区及延伸阅读链接，不要输出开场白或重复主标题。',
+            },
+            { role: 'user', content: rawText.slice(0, 12000) },
+          ],
+        }),
+      });
+      if (llmRes.ok) {
+        const data = await llmRes.json();
+        contentZh = data?.choices?.[0]?.message?.content?.trim() || '';
+      }
+    } catch {}
+  }
+
+  if (contentZh) {
+    try {
+      await env.DB.prepare('UPDATE articles SET content_zh = ? WHERE id = ?')
+        .bind(contentZh, artId)
+        .run();
+    } catch {}
+  }
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -246,6 +331,7 @@ export default {
           return jsonResp({ error: err.message }, 500);
         }
       }
+
       if (request.method === 'POST') {
         try {
           const body = await request.json();
@@ -304,7 +390,7 @@ export default {
             JSON.stringify(dislikeKeywords)
           ).run();
 
-          // 实时全网搜索并质检专属高质量资讯，写入当天简报
+          // 实时全网搜索并质检专属高质量资讯，写入当天简报并在后台并发预翻译
           let addedCount = 0;
           let fetchDebug = null;
           if (likeKeywords.length > 0) {
@@ -323,6 +409,7 @@ export default {
                 `DELETE FROM articles WHERE report_date = ? AND target_uid = ?`
               ).bind(targetDate, targetUid).run();
 
+              const insertedTasks = [];
               for (let i = 0; i < newArticles.length; i++) {
                 const art = newArticles[i];
                 const artId = `pref_${targetUid.slice(0, 6)}_${Date.now()}_${i}`;
@@ -342,7 +429,17 @@ export default {
                   Number(art.score) || 4.0,
                   targetUid
                 ).run();
+                insertedTasks.push({ id: artId, url: art.url });
                 addedCount++;
+              }
+
+              // 接口先秒返回，后台异步并发预翻译所有新增专属资讯并回写 D1
+              if (insertedTasks.length > 0 && ctx?.waitUntil) {
+                ctx.waitUntil(
+                  Promise.allSettled(
+                    insertedTasks.map((t) => pretranslateSingleArticle(t.id, t.url, env))
+                  )
+                );
               }
             }
           }
@@ -404,9 +501,9 @@ export default {
         const res = await fetch(imgUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': '' // 清除 Referer，绕过部分外网防盗链
+            'Referer': '', // 清除 Referer，绕过部分外网防盗链
           },
-          cf: { cacheTtl: 86400, cacheEverything: true }
+          cf: { cacheTtl: 86400, cacheEverything: true },
         });
         const headers = new Headers(res.headers);
         headers.set('Cache-Control', 'public, max-age=86400');
@@ -420,7 +517,6 @@ export default {
     // 2. 获取个性化重排后的简报
     if (url.pathname === '/api/briefing' && request.method === 'GET') {
       try {
-        
         const uid = (url.searchParams.get('uid') || 'default').trim();
         const reqDate = url.searchParams.get('date');
 
@@ -436,12 +532,11 @@ export default {
 
         const targetDate = reqDate && dates.includes(reqDate) ? reqDate : dates[0];
 
-       // 查询当天公共文章池 + 当前用户的专属搜索文章
-          const { results: articleRows } = await env.DB.prepare(
-            `SELECT * FROM articles WHERE report_date = ? AND (target_uid IS NULL OR target_uid = 'all' OR target_uid = ?) ORDER BY score DESC`
-          ).bind(targetDate, uid).all();
+        // 查询当天公共文章池 + 当前用户的专属搜索文章
+        const { results: articleRows } = await env.DB.prepare(
+          `SELECT * FROM articles WHERE report_date = ? AND (target_uid IS NULL OR target_uid = 'all' OR target_uid = ?) ORDER BY score DESC`
+        ).bind(targetDate, uid).all();
 
-        // 查询该用户的全部历史偏好，计算标签与分类权重
         // 查询该用户的自定义文本偏好
         const prefRow = await env.DB.prepare(
           'SELECT pref_text, like_keywords, dislike_keywords FROM user_prefs WHERE uid = ?'
@@ -449,7 +544,8 @@ export default {
         const userPrefText = prefRow?.pref_text || '';
         const likeKws = JSON.parse(prefRow?.like_keywords || '[]').map((k) => k.toLowerCase());
         const dislikeKws = JSON.parse(prefRow?.dislike_keywords || '[]').map((k) => k.toLowerCase());
-        
+
+        // 查询该用户的全部历史偏好，计算标签与分类权重
         const { results: fbRows } = await env.DB.prepare(
           'SELECT article_id, category, tags, action FROM user_feedback WHERE uid = ?'
         ).bind(uid).all();
@@ -483,7 +579,7 @@ export default {
           for (const t of tags) {
             boost += tagWeights[t] || 0;
           }
-          // ↓ 插入在第 271 行这里：计算自定义文本偏好的加分/减分
+
           const searchText = `${row.title || ''} ${row.tldr || ''} ${tags.join(' ')}`.toLowerCase();
           let matchedPref = row.target_uid === uid;
           let matchedDislike = false;
@@ -531,11 +627,11 @@ export default {
         });
 
         // 只要不是被用户明确屏蔽的普通文章，全部保留展示；专属文章置顶
-          const finalArticles = articles
-            .filter((a) => !(a.matchedDislike && a.score < 4.7))
-            .sort((a, b) => b._rankScore - a._rankScore);
+        const finalArticles = articles
+          .filter((a) => !(a.matchedDislike && a.score < 4.7))
+          .sort((a, b) => b._rankScore - a._rankScore);
 
-          const cleanArticles = finalArticles.map(({ _rankScore, matchedDislike, ...rest }) => rest);
+        const cleanArticles = finalArticles.map(({ _rankScore, matchedDislike, ...rest }) => rest);
 
         return jsonResp({
           dates,
@@ -607,6 +703,7 @@ export default {
         return jsonResp({ error: err.message }, 500);
       }
     }
+
     // 5. 生成 WxPusher 专属带参订阅二维码（前端弹窗调用）
     if (url.pathname === '/api/wxpusher/qrcode' && request.method === 'GET') {
       const uid = (url.searchParams.get('uid') || 'default').trim();
@@ -653,17 +750,17 @@ export default {
       }
     }
 
-// 1. AI 精准翻译接口（供纯享页异步调用）
+    // 7. AI 精准翻译接口（供纯享页异步调用，并顺手回写 D1 缓存）
     if (url.pathname === '/api/translate' && request.method === 'POST') {
       try {
         if (!env.LLM_API_KEY) {
           return new Response(JSON.stringify({ error: '未配置 LLM_API_KEY 环境变量' }), {
             status: 500,
-            headers: { 'Content-Type': 'application/json; charset=utf-8' }
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
           });
         }
 
-        const { text } = await request.json();
+        const { text, url: articleUrl } = await request.json();
         if (!text || !text.trim()) {
           return new Response(JSON.stringify({ error: '待翻译内容为空' }), { status: 400 });
         }
@@ -675,7 +772,7 @@ export default {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${env.LLM_API_KEY}`
+            'Authorization': `Bearer ${env.LLM_API_KEY}`,
           },
           body: JSON.stringify({
             model,
@@ -683,14 +780,14 @@ export default {
             messages: [
               {
                 role: 'system',
-                content: '你是一位精通人工智能、计算机科学与科技新闻的专业中英译者。请将用户提供的文章正文准确、流畅地翻译为简体中文。\n要求：\n1. 严格忠实原文，不遗漏关键数据、实验结论与技术细节，不擅自发挥。\n2. 保留常见专业英文术语（如 LLM、Agent、Transformer、Benchmark、API、Fine-tuning 等）或采用业内通用译法。\n3. 保持原有的段落与小标题结构，使用简洁的 Markdown（如 ## 标题、加粗、列表）输出，不要输出任何开场白或解释。'
+                content: '你是一位精通人工智能、计算机科学与科技新闻的专业中英译者。请将用户提供的文章正文准确、流畅地翻译为简体中文。\n要求：\n1. 严格忠实原文，不遗漏关键数据、实验结论与技术细节，不擅自发挥。\n2. 保留常见专业英文术语（如 LLM、Agent、Transformer、Benchmark、API、Fine-tuning 等）或采用业内通用译法。\n3. 保持原有的段落与小标题结构，使用简洁的 Markdown（如 ## 标题、加粗、列表）输出，不要输出任何开场白或解释。',
               },
               {
                 role: 'user',
-                content: text.slice(0, 12000)
-              }
-            ]
-          })
+                content: text.slice(0, 12000),
+              },
+            ],
+          }),
         });
 
         if (!llmRes.ok) {
@@ -702,18 +799,25 @@ export default {
         const translated = data?.choices?.[0]?.message?.content?.trim();
         if (!translated) throw new Error('模型未返回有效译文');
 
+        if (articleUrl) {
+          const savePromise = env.DB.prepare(
+            'UPDATE articles SET content_zh = ? WHERE url = ? AND (content_zh IS NULL OR content_zh = "")'
+          ).bind(translated, articleUrl).run().catch(() => {});
+          if (ctx?.waitUntil) ctx.waitUntil(savePromise);
+        }
+
         return new Response(JSON.stringify({ translated }), {
-          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
         });
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json; charset=utf-8' }
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
         });
       }
     }
 
-    // 2. 纯享阅读中转（支持自动 AI 中文翻译 + 中原文切换）
+    // 8. 纯享阅读中转（优先读取 D1 预翻译缓存秒开，未命中则降级为实时抓取 + AI 翻译）
     if (url.pathname === '/api/read' && request.method === 'GET') {
       const targetUrl = url.searchParams.get('url');
       if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
@@ -723,6 +827,7 @@ export default {
       const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       let title = '纯享阅读';
       let articleHtml = '';
+
       // 优先从 D1 读取预翻译好的中文正文（秒开，无需等待）
       try {
         const cached = await env.DB.prepare(
@@ -735,6 +840,7 @@ export default {
             const inline = (s) => escapeHtml(s)
               .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
               .replace(/`([^`]+)`/g, '<code>$1</code>')
+              .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_, alt, src) => `<img src="/api/img?url=${encodeURIComponent(src)}" alt="${alt}" loading="lazy" />`)
               .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
             const lines = md.split(/\r?\n/);
             let html = '', inUl = false, inOl = false;
@@ -775,6 +881,7 @@ export default {
     .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid #f0f0ef; font-size: 14px; }
     .top-bar a { color: #2563eb; text-decoration: none; font-weight: 500; }
     article { font-size: 15px; line-height: 1.85; letter-spacing: 0.02em; word-break: break-word; }
+    article img { max-width: 100%; height: auto; display: block; margin: 16px auto; border-radius: 8px; }
     article h1 { font-size: 20px; line-height: 1.4; font-weight: 700; margin: 8px 0 20px; color: #111827; }
     article h2 { font-size: 16px; line-height: 1.45; font-weight: 600; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #f3f4f6; color: #111827; }
     article h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; color: #374151; }
@@ -790,7 +897,6 @@ export default {
   <div class="container">
     <div class="top-bar">
       <a href="javascript:history.back()">← 返回简报</a>
-      
     </div>
     <article>
       <h1>${escapeHtml(cachedTitle)}</h1>
@@ -813,8 +919,8 @@ export default {
           return new Response(instantHtml, {
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
-              'Cache-Control': 'public, max-age=3600'
-            }
+              'Cache-Control': 'public, max-age=3600',
+            },
           });
         }
       } catch (e) {
@@ -825,25 +931,25 @@ export default {
         if (env.JINA_API_KEY) {
           const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
             headers: {
-          'Accept': 'text/plain',
-          'X-Return-Format': 'markdown',
-          'Authorization': `Bearer ${env.JINA_API_KEY}`,
-          'X-Remove-Selector': "header, nav, footer, aside, [role='navigation'], [role='banner'], [class*='ad-'], [class*='ads'], [class*='login'], [class*='signin'], [class*='signup'], [class*='subscribe'], [class*='newsletter'], [class*='cookie'], [class*='share'], [class*='social'], [class*='related'], [class*='recommend'], [class*='comment'], [class*='paywall'], [id*='ad'], [id*='cookie']",
-          'X-Target-Selector': 'article, main, .article-body, .uni-blog-article'
-        }
-      });
-      if (jinaRes.ok) {
-        const rawMd = await jinaRes.text();
-        const md = rawMd
-          .split('\n')
-          .filter(line => {
-            const trimmed = line.trim();
-            if (/^[-*•]\s*\[.*?\]\(https?:\/\/.*?\)$/.test(trimmed)) return false;
-            if (/^(Sign in|Log in|Sign up|Subscribe|Accept all cookies|Share this|Related articles)/i.test(trimmed)) return false;
-            return true;
-          })
-          .join('\n');
-        articleHtml = '<p>' + escapeHTML(md)
+              'Accept': 'text/plain',
+              'X-Return-Format': 'markdown',
+              'Authorization': `Bearer ${env.JINA_API_KEY}`,
+              'X-Remove-Selector': "header, nav, footer, aside, [role='navigation'], [role='banner'], [class*='ad-'], [class*='ads'], [class*='login'], [class*='signin'], [class*='signup'], [class*='subscribe'], [class*='newsletter'], [class*='cookie'], [class*='share'], [class*='social'], [class*='related'], [class*='recommend'], [class*='comment'], [class*='paywall'], [id*='ad'], [id*='cookie']",
+              'X-Target-Selector': 'article, main, .article-body, .uni-blog-article',
+            },
+          });
+          if (jinaRes.ok) {
+            const rawMd = await jinaRes.text();
+            const md = rawMd
+              .split('\n')
+              .filter((line) => {
+                const trimmed = line.trim();
+                if (/^[-*•]\s*\[.*?\]\(https?:\/\/.*?\)$/.test(trimmed)) return false;
+                if (/^(Sign in|Log in|Sign up|Subscribe|Accept all cookies|Share this|Related articles)/i.test(trimmed)) return false;
+                return true;
+              })
+              .join('\n');
+            articleHtml = '<p>' + escapeHtml(md)
               .replace(/^### (.*$)/gim, '<h3>$1</h3>')
               .replace(/^## (.*$)/gim, '<h2>$1</h2>')
               .replace(/^# (.*$)/gim, '<h1>$1</h1>')
@@ -859,9 +965,9 @@ export default {
           const res = await fetch(targetUrl, {
             headers: {
               'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             },
-            redirect: 'follow'
+            redirect: 'follow',
           });
 
           if (!res.ok) throw new Error(`原文抓取失败 (${res.status})`);
@@ -896,11 +1002,11 @@ export default {
   <title>${escapeHtml(title)} - 纯享阅读</title>
   <style>
     article img {
-    max-width: 100%;
-    height: auto;
-    display: block;
-    margin: 16px auto;
-    border-radius: 8px;
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 16px auto;
+      border-radius: 8px;
     }
     html, body {
       -webkit-text-size-adjust: 100% !important;
@@ -951,8 +1057,8 @@ export default {
       cursor: pointer;
     }
     article {
-      font-size: 12px;
-      line-height: 1.8;
+      font-size: 15px;
+      line-height: 1.85;
       letter-spacing: 0.02em;
       word-break: break-word;
     }
@@ -973,7 +1079,7 @@ export default {
       color: #111827;
     }
     article h3 {
-      font-size: 12px;
+      font-size: 15px;
       font-weight: 600;
       margin: 22px 0 8px;
       color: #374151;
@@ -1012,7 +1118,6 @@ export default {
   <div class="container">
     <div class="top-bar">
       <a href="javascript:history.back()">← 返回简报</a>
-      
     </div>
     <div id="trans-bar" class="trans-bar" style="display:none;">
       <span id="trans-status">正在 AI 精准翻译为中文...</span>
@@ -1049,7 +1154,6 @@ export default {
       const plainText = (origEl.innerText || '').replace(/\\n{3,}/g, '\\n\\n').trim();
       if (!plainText) return;
 
-      // 始终显示翻译栏，确保随时可手动触发
       bar.style.display = 'flex';
 
       function renderMarkdown(md) {
@@ -1111,7 +1215,7 @@ export default {
           const res = await fetch('/api/translate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: plainText })
+            body: JSON.stringify({ text: plainText, url: ${JSON.stringify(targetUrl)} })
           });
           const data = await res.json();
           if (!res.ok || !data.translated) throw new Error(data.error || '翻译失败');
@@ -1142,11 +1246,9 @@ export default {
         toggleBtn.textContent = showingZh ? '切换原文' : '查看译文';
       };
 
-      // 更准确的英文判定：统计英文字母数 vs 中文字符数
       const cnChars = (plainText.match(/[\\u4e00-\\u9fa5]/g) || []).length;
       const enChars = (plainText.match(/[a-zA-Z]/g) || []).length;
 
-      // 只要英文字母明显多于中文（英文内容为主），就自动翻译
       if (enChars > cnChars * 2) {
         runTranslate();
       } else {
@@ -1162,12 +1264,12 @@ export default {
         return new Response(pageHtml, {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-cache'
-          }
+            'Cache-Control': 'no-cache',
+          },
         });
       } catch (err) {
         return new Response(
-          `<html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px;line-height:1.6;"><h3>纯享解析失败</h3><p>${escapeHtml(err.message)}</p><p></p></body></html>`,
+          `<html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px;line-height:1.6;"><h3>纯享解析失败</h3><p>${escapeHtml(err.message)}</p></body></html>`,
           { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
       }
