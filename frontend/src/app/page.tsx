@@ -430,7 +430,7 @@ export default function DailyBriefingPage() {
         }}
         className="px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors"
       >
-        ⚙️ 偏好
+        ⚙️
       </button>
           </div>
         </div>
