@@ -569,6 +569,52 @@ export default {
         return jsonResp({ error: err.message }, 500);
       }
     }
+    // 5. 生成 WxPusher 专属带参订阅二维码（前端弹窗调用）
+    if (url.pathname === '/api/wxpusher/qrcode' && request.method === 'GET') {
+      const uid = (url.searchParams.get('uid') || 'default').trim();
+      if (!env.WXPUSHER_APP_TOKEN) {
+        return jsonResp({ error: '未配置 WXPUSHER_APP_TOKEN' }, 500);
+      }
+      try {
+        const res = await fetch('https://wxpusher.zjiecode.com/api/fun/create/qrcode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            appToken: env.WXPUSHER_APP_TOKEN,
+            extra: uid,
+            validTime: 1800,
+          }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.msg || '生成二维码失败');
+        return jsonResp({ ok: true, qrUrl: data.data.url });
+      } catch (err) {
+        return jsonResp({ error: err.message }, 500);
+      }
+    }
+
+    // 6. 接收 WxPusher 扫码关注回调，自动把用户写入 D1 的 users 表
+    if (url.pathname === '/api/wxpusher/callback' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        if (body.action === 'app_subscribe' && body.data) {
+          const wxUid = body.data.uid;
+          const userUid = (body.data.extra || wxUid).trim();
+
+          if (wxUid) {
+            await env.DB.prepare(
+              `INSERT INTO users (uid, wechat_openid)
+               VALUES (?, ?)
+               ON CONFLICT(uid) DO UPDATE SET wechat_openid = excluded.wechat_openid`
+            ).bind(userUid, wxUid).run();
+          }
+        }
+        return jsonResp({ ok: true });
+      } catch (err) {
+        return jsonResp({ error: err.message }, 500);
+      }
+    }
+
 // 1. AI 精准翻译接口（供纯享页异步调用）
     if (url.pathname === '/api/translate' && request.method === 'POST') {
       try {
