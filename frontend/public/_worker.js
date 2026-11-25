@@ -222,23 +222,23 @@ export default {
 
           // 实时全网搜索并质检专属高质量资讯，写入当天简报
           let addedCount = 0;
-          if (likeKws.length > 0) {
+          if (likeKeywords.length > 0) {
             const latestRow = await env.DB.prepare(
               `SELECT report_date FROM articles ORDER BY report_date DESC LIMIT 1`
             ).first();
 
             if (latestRow?.report_date) {
               const targetDate = latestRow.report_date;
-              const newArticles = await fetchPersonalizedNews(likeKws, prefText, env);
+              const newArticles = await fetchPersonalizedNews(likeKeywords, prefText, env);
 
               // 先清理该用户当天旧的专属搜索文章，再写入新的
               await env.DB.prepare(
                 `DELETE FROM articles WHERE report_date = ? AND target_uid = ?`
-              ).bind(targetDate, uid).run();
+              ).bind(targetDate, targetUid).run();
 
               for (let i = 0; i < newArticles.length; i++) {
                 const art = newArticles[i];
-                const artId = `pref_${uid.slice(0, 6)}_${Date.now()}_${i}`;
+                const artId = `pref_${targetUid.slice(0, 6)}_${Date.now()}_${i}`;
                 await env.DB.prepare(
                   `INSERT OR REPLACE INTO articles
                    (id, report_date, category, title, tldr, tags, url, source_name, score, target_uid)
@@ -253,7 +253,7 @@ export default {
                   art.url,
                   art.sourceName || '全网实时',
                   Number(art.score) || 4.0,
-                  uid
+                  targetUid
                 ).run();
                 addedCount++;
               }
