@@ -18,6 +18,13 @@ function isAuthorized(request, env) {
   return request.headers.get('Authorization') === `Bearer ${secret}`;
 }
 
+function escapeHtmlBasic(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // 常见硬付费墙与强反爬域名（纯享模式无法提取正文，抓取时直接过滤）
 const BLOCKED_DOMAINS = [
   'ft.com', 'wsj.com', 'bloomberg.com', 'nytimes.com', 'economist.com',
@@ -53,6 +60,217 @@ function safeSlice(text, maxLen = 24000) {
   return text.slice(0, cut > maxLen * 0.5 ? cut : maxLen);
 }
 
+// 将直连 HTML 中的音视频标签提取为可保留的媒体标记行
+function extractMediaMarkersFromHtml(html) {
+  if (!html) return '';
+  const markers = [];
+  const seen = new Set();
+
+  const pushMarker = (line) => {
+    if (!line || seen.has(line)) return;
+    seen.add(line);
+    markers.push(line);
+  };
+
+  // 提取 <video> / <source src="...mp4...">
+  const videoMatches = html.match(/<video[\s\S]*?<\/video>/gi) || [];
+  for (const vBlock of videoMatches) {
+    const srcMatch = vBlock.match(/(?:src|data-src)=["'](https?:\/\/[^"']+)["']/i)
+      || vBlock.match(/<source[^>]+src=["'](https?:\/\/[^"']+)["']/i);
+    if (srcMatch?.[1]) {
+      pushMarker(`[视频](${srcMatch[1]})`);
+    }
+  }
+
+  // 提取 <audio> / <source src="...mp3...">
+  const audioMatches = html.match(/<audio[\s\S]*?<\/audio>/gi) || [];
+  for (const aBlock of audioMatches) {
+    const srcMatch = aBlock.match(/(?:src|data-src)=["'](https?:\/\/[^"']+)["']/i)
+      || aBlock.match(/<source[^>]+src=["'](https?:\/\/[^"']+)["']/i);
+    if (srcMatch?.[1]) {
+      pushMarker(`[音频](${srcMatch[1]})`);
+    }
+  }
+
+  // 提取页面中明确的音视频/YouTube 链接
+  const urlMatches = html.match(/https?:\/\/[^\s"'<>)]+/gi) || [];
+  for (const u of urlMatches) {
+    if (/\.(?:mp4|webm|mov|m3u8)(?:\?[^\s"'<>)]*)?$/i.test(u)) {
+      pushMarker(`[视频](${u})`);
+    } else if (/\.(?:mp3|wav|ogg|m4a|aac)(?:\?[^\s"'<>)]*)?$/i.test(u)) {
+      pushMarker(`[音频](${u})`);
+    } else if (/(?:youtube\.com\/watch\?v=|youtu\.be\/)[A-Za-z0-9_-]{6,}/i.test(u)) {
+      pushMarker(u);
+    }
+  }
+
+  return markers.length > 0 ? '\n\n' + markers.join('\n\n') : '';
+}
+
+// 渲染支持标题、段落、列表、引用、图片、音频、视频的富文本 HTML
+function renderRichMarkdown(md, escapeHtmlFn) {
+  const esc = escapeHtmlFn || escapeHtmlBasic;
+
+  const inline = (s) => {
+    let out = esc(s);
+
+    // 1. 图片 -> 走 /api/img 代理
+    out = out.replace(
+      /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+      (_, alt, src) =>
+        `<figure class="media-block"><img src="/api/img?url=${encodeURIComponent(src)}" alt="${esc(alt)}" loading="lazy" /><figcaption>${esc(alt || '配图')}</figcaption></figure>`
+    );
+
+    // 2. 行内视频直链 -> HTML5 video 播放器
+    out = out.replace(
+      /\[([^\]]*)\]\((https?:\/\/[^\s)]+\.(?:mp4|webm|mov|m3u8)(?:\?[^\s)]*)?)\)/gi,
+      (_, label, vUrl) =>
+        `<figure class="media-block"><video controls preload="metadata" playsinline src="${esc(vUrl)}"></video><figcaption>${esc(label || '视频播放')}</figcaption></figure>`
+    );
+
+    // 3. 行内音频直链 -> HTML5 audio 播放器
+    out = out.replace(
+      /\[([^\]]*)\]\((https?:\/\/[^\s)]+\.(?:mp3|wav|ogg|m4a|aac)(?:\?[^\s)]*)?)\)/gi,
+      (_, label, aUrl) =>
+        `<figure class="media-block"><audio controls preload="metadata" src="${esc(aUrl)}"></audio><figcaption>${esc(label || '音频播放')}</figcaption></figure>`
+    );
+
+    // 4. 普通超链接
+    out = out.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener">$1</a>'
+    );
+
+    // 5. 加粗与行内代码
+    out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
+    return out;
+  };
+
+  const lines = String(md || '').split(/\r?\n/);
+  let html = '';
+  let inUl = false;
+  let inOl = false;
+
+  const closeLists = () => {
+    if (inUl) { html += '</ul>'; inUl = false; }
+    if (inOl) { html += '</ol>'; inOl = false; }
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { closeLists(); continue; }
+
+    // 独立成行的 YouTube 链接 -> 嵌入式播放器卡片
+    const ytMatch = line.match(/^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+    if (ytMatch) {
+      closeLists();
+      const vid = ytMatch[1];
+      html += `<figure class="media-block"><div class="video-frame"><iframe src="https://www.youtube.com/embed/${esc(vid)}" title="YouTube video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div><figcaption><a href="https://www.youtube.com/watch?v=${esc(vid)}" target="_blank" rel="noopener">在 YouTube 中打开视频 ↗</a></figcaption></figure>`;
+      continue;
+    }
+
+    // 独立成行的视频直链 -> HTML5 video
+    if (/^https?:\/\/\S+\.(?:mp4|webm|mov|m3u8)(?:\?\S*)?$/i.test(line)) {
+      closeLists();
+      html += `<figure class="media-block"><video controls preload="metadata" playsinline src="${esc(line)}"></video><figcaption>视频播放</figcaption></figure>`;
+      continue;
+    }
+
+    // 独立成行的音频直链 -> HTML5 audio
+    if (/^https?:\/\/\S+\.(?:mp3|wav|ogg|m4a|aac)(?:\?\S*)?$/i.test(line)) {
+      closeLists();
+      html += `<figure class="media-block"><audio controls preload="metadata" src="${esc(line)}"></audio><figcaption>音频播放</figcaption></figure>`;
+      continue;
+    }
+
+    if (/^###\s+/.test(line)) {
+      closeLists();
+      html += '<h3>' + inline(line.replace(/^###\s+/, '')) + '</h3>';
+    } else if (/^##\s+/.test(line)) {
+      closeLists();
+      html += '<h2>' + inline(line.replace(/^##\s+/, '')) + '</h2>';
+    } else if (/^#\s+/.test(line)) {
+      closeLists();
+      html += '<h1>' + inline(line.replace(/^#\s+/, '')) + '</h1>';
+    } else if (/^>\s*/.test(line)) {
+      closeLists();
+      html += '<blockquote>' + inline(line.replace(/^>\s*/, '')) + '</blockquote>';
+    } else if (/^[-*]\s+/.test(line)) {
+      if (inOl) { html += '</ol>'; inOl = false; }
+      if (!inUl) { html += '<ul>'; inUl = true; }
+      html += '<li>' + inline(line.replace(/^[-*]\s+/, '')) + '</li>';
+    } else if (/^\d+\.\s+/.test(line)) {
+      if (inUl) { html += '</ul>'; inUl = false; }
+      if (!inOl) { html += '<ol>'; inOl = true; }
+      html += '<li>' + inline(line.replace(/^\d+\.\s+/, '')) + '</li>';
+    } else {
+      closeLists();
+      html += '<p>' + inline(line) + '</p>';
+    }
+  }
+
+  closeLists();
+  return html;
+}
+
+// 分段调用 DeepSeek 翻译长文，防止单次输出被截断
+async function translateLongMarkdown(fullText, systemPrompt, env) {
+  const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+  const model = env.LLM_MODEL || 'deepseek-chat';
+  const apiKey = env.LLM_API_KEY;
+  if (!apiKey || !fullText.trim()) return '';
+
+  const capped = fullText.slice(0, 45000);
+  const chunks = [];
+  let start = 0;
+  while (start < capped.length) {
+    let end = Math.min(start + 6500, capped.length);
+    if (end < capped.length) {
+      const pBreak = capped.lastIndexOf('\n\n', end);
+      const lBreak = capped.lastIndexOf('\n', end);
+      const splitAt = pBreak > start + 2000 ? pBreak : (lBreak > start + 2000 ? lBreak : end);
+      end = splitAt;
+    }
+    const piece = capped.slice(start, end).trim();
+    if (piece) chunks.push(piece);
+    start = end;
+  }
+
+  const results = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const partHint = chunks.length > 1
+      ? `\n注意：当前为全文第 ${i + 1}/${chunks.length} 段，请完整翻译本段所有内容，严禁省略、删减或总结。`
+      : '';
+    const llmRes = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        max_tokens: 8192,
+        messages: [
+          { role: 'system', content: systemPrompt + partHint },
+          { role: 'user', content: chunks[i] },
+        ],
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!llmRes.ok) {
+      const errText = await llmRes.text();
+      throw new Error(`模型接口报错 (${llmRes.status}): ${errText.slice(0, 120)}`);
+    }
+    const data = await llmRes.json();
+    const pieceOut = data?.choices?.[0]?.message?.content?.trim();
+    if (pieceOut) results.push(pieceOut);
+  }
+
+  return results.join('\n\n').trim();
+}
+
 /**
  * 根据用户偏好关键词，实时抓取 Hacker News & GDELT 资讯并由 DeepSeek 质检打分与翻译
  */
@@ -63,12 +281,11 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     return { articles: [], debug };
   }
 
-  // 优先挑出英文关键词（适合科技/全球新闻接口），没有则用第一个词
   const enKw = likeKws.find((k) => /^[a-zA-Z0-9\s\-+.]+$/.test(k)) || likeKws[0];
   const rawItems = [];
   const seenUrls = new Set();
 
-  // 1. 数据源 A：Hacker News Algolia API（近 14 天高相关科技/AI 资讯，极稳）
+  // 1. 数据源 A：Hacker News Algolia API
   try {
     const sinceTs = Math.floor(Date.now() / 1000) - 14 * 86400;
     const hnUrl = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(enKw)}&tags=story&numericFilters=created_at_i>${sinceTs}&hitsPerPage=8`;
@@ -96,7 +313,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     debug.sources.push({ name: 'hn', err: e.message });
   }
 
-  // 2. 数据源 B：GDELT 2.0 全球新闻开放 API（补充主流媒体报道）
+  // 2. 数据源 B：GDELT 2.0 全球新闻开放 API
   try {
     const gdeltUrl = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(enKw)}&mode=artlist&maxrecords=8&format=json&sort=datedesc`;
     const gdRes = await fetch(gdeltUrl, { signal: AbortSignal.timeout(8000) });
@@ -194,6 +411,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
 async function pretranslateSingleArticle(artId, targetUrl, env) {
   if (!artId || !targetUrl || isBlockedUrl(targetUrl)) return;
   let rawText = '';
+  let rawHtmlForMedia = '';
 
   // 1. 优先通过 Jina Reader 提取纯净 Markdown 正文（10 秒超时）
   try {
@@ -216,7 +434,7 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
     }
   } catch {}
 
-  // 2. 兜底：直接抓取原文并清除无关标签（8 秒超时 + 截断超大 HTML）
+  // 2. 兜底：直接抓取原文并保留音视频标记
   if (!rawText) {
     try {
       const r = await fetch(targetUrl, {
@@ -225,17 +443,17 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
         signal: AbortSignal.timeout(8000),
       });
       if (r.ok) {
-        const html = (await r.text())
-          .slice(0, 250000)
+        rawHtmlForMedia = (await r.text()).slice(0, 250000);
+        const mediaExtra = extractMediaMarkersFromHtml(rawHtmlForMedia);
+        const htmlCleaned = rawHtmlForMedia
           .replace(/<(script|style|nav|header|footer|aside|noscript)[^>]*>[\s\S]*?<\/\1>/gi, '');
-        rawText = html.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        rawText = (htmlCleaned.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n').trim() + mediaExtra).trim();
       }
     } catch {}
   }
 
   if (isBlockedContent(rawText)) return;
 
-  // 若原文以中文为主，直接缓存
   const cnChars = (rawText.match(/[\u4e00-\u9fa5]/g) || []).length;
   const enChars = (rawText.match(/[a-zA-Z]/g) || []).length;
   let contentZh = '';
@@ -243,34 +461,11 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
   if (enChars <= cnChars * 2) {
     contentZh = safeSlice(rawText, 24000);
   } else if (env.LLM_API_KEY) {
-    // 3. 调用 DeepSeek 清洗并翻译为中文 Markdown（放宽至 24000 字符 + max_tokens: 8192）
-    const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
-    try {
-      const llmRes = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${env.LLM_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: env.LLM_MODEL || 'deepseek-chat',
-          temperature: 0.2,
-          max_tokens: 8192,
-          messages: [
-            {
-              role: 'system',
-              content:
-                '你是一位精通人工智能与科技新闻的专业中英译者。请将文章正文准确、流畅地翻译为简体中文 Markdown，严格保留原文数据、结论、小标题结构与正文配图 ![说明](URL)；彻底删除导航栏、登录注册、广告、Cookie 声明、评论区及延伸阅读链接，不要输出开场白或重复主标题。',
-            },
-            { role: 'user', content: safeSlice(rawText, 24000) },
-          ],
-        }),
-      });
-      if (llmRes.ok) {
-        const data = await llmRes.json();
-        contentZh = data?.choices?.[0]?.message?.content?.trim() || '';
-      }
-    } catch {}
+    contentZh = await translateLongMarkdown(
+      rawText,
+      '你是一位精通人工智能与科技新闻的专业中英译者。请将文章正文准确、流畅地翻译为简体中文 Markdown，严格保留原文数据、结论、小标题结构、正文配图 ![说明](URL) 以及视频、音频链接；彻底删除导航栏、登录注册、广告、Cookie 声明、评论区及延伸阅读链接，不要输出开场白或重复主标题。',
+      env
+    );
   }
 
   if (contentZh && !isBlockedContent(contentZh)) {
@@ -351,7 +546,7 @@ export default {
       }
     }
 
-    // 0. 读取/保存用户自定义文本偏好（保存时自动用 DeepSeek 提取中英文关键词）
+    // 0. 读取/保存用户自定义文本偏好
     if (url.pathname === '/api/prefs') {
       const uid = (url.searchParams.get('uid') || 'default').trim();
 
@@ -380,7 +575,6 @@ export default {
           let likeKeywords = [];
           let dislikeKeywords = [];
 
-          // 调用 DeepSeek 将自然语言偏好解析为中英文匹配词
           if (prefText && env.LLM_API_KEY) {
             const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
             const model = env.LLM_MODEL || 'deepseek-chat';
@@ -429,7 +623,6 @@ export default {
             JSON.stringify(dislikeKeywords)
           ).run();
 
-          // 实时全网搜索并质检专属高质量资讯，写入当天简报并在后台顺序预翻译
           let addedCount = 0;
           let fetchDebug = null;
           if (likeKeywords.length > 0) {
@@ -443,7 +636,6 @@ export default {
               const newArticles = result.articles;
               fetchDebug = result.debug;
 
-              // 先清理该用户当天旧的专属搜索文章，再写入新的
               await env.DB.prepare(
                 `DELETE FROM articles WHERE report_date = ? AND target_uid = ?`
               ).bind(targetDate, targetUid).run();
@@ -472,7 +664,6 @@ export default {
                 addedCount++;
               }
 
-              // 接口先秒返回，后台按顺序预翻译避免触发 Jina 限流或 Worker CPU 超限
               if (insertedTasks.length > 0 && ctx?.waitUntil) {
                 ctx.waitUntil(
                   (async () => {
@@ -494,13 +685,13 @@ export default {
       }
     }
 
-    // 1. 记录/取消用户偏好反馈（按 uid 隔离）
+    // 1. 记录/取消用户偏好反馈
     if (url.pathname === '/api/feedback' && request.method === 'POST') {
       try {
         const body = await request.json();
         const uid = (body.uid || 'default').trim();
         const articleId = body.articleId;
-        const action = body.action; // 'like' | 'dislike' | null
+        const action = body.action;
 
         if (!articleId) return jsonResp({ error: '缺少 articleId' }, 400);
 
@@ -533,7 +724,7 @@ export default {
       }
     }
 
-    // 图片中转代理（解决国内直连外网图床裂图/加载慢）
+    // 图片中转代理
     if (url.pathname === '/api/img' && request.method === 'GET') {
       const imgUrl = url.searchParams.get('url');
       if (!imgUrl || !/^https?:\/\//i.test(imgUrl)) {
@@ -688,7 +879,7 @@ export default {
       }
     }
 
-    // 3. 定时任务入库接口（写入当日公共文章池）
+    // 3. 定时任务入库接口
     if (url.pathname === '/api/ingest' && request.method === 'POST') {
       if (!isAuthorized(request, env)) return jsonResp({ error: 'Unauthorized' }, 401);
       try {
@@ -726,7 +917,7 @@ export default {
       }
     }
 
-    // 4. 获取已绑定微信 OpenID 的用户列表（供推送脚本使用）
+    // 4. 获取已绑定微信 OpenID 的用户列表
     if (url.pathname === '/api/users' && request.method === 'GET') {
       if (!isAuthorized(request, env)) return jsonResp({ error: 'Unauthorized' }, 401);
       try {
@@ -739,7 +930,7 @@ export default {
       }
     }
 
-    // 5. 生成 WxPusher 专属带参订阅二维码（前端弹窗调用）
+    // 5. 生成 WxPusher 专属带参订阅二维码
     if (url.pathname === '/api/wxpusher/qrcode' && request.method === 'GET') {
       const uid = (url.searchParams.get('uid') || 'default').trim();
       if (!env.WXPUSHER_APP_TOKEN) {
@@ -763,7 +954,7 @@ export default {
       }
     }
 
-    // 6. 接收 WxPusher 扫码关注回调，自动把用户写入 D1 的 users 表
+    // 6. 接收 WxPusher 扫码关注回调
     if (url.pathname === '/api/wxpusher/callback' && request.method === 'POST') {
       try {
         const body = await request.json();
@@ -785,7 +976,7 @@ export default {
       }
     }
 
-    // 7. AI 精准翻译接口（放宽至 24000 字符 + max_tokens: 8192，并回写有效 D1 缓存）
+    // 7. AI 精准翻译接口（分段翻译 + 保留音视频/图片链接 + 回写更优 D1 缓存）
     if (url.pathname === '/api/translate' && request.method === 'POST') {
       try {
         if (!env.LLM_API_KEY) {
@@ -800,45 +991,17 @@ export default {
           return new Response(JSON.stringify({ error: '待翻译内容为空' }), { status: 400 });
         }
 
-        const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
-        const model = env.LLM_MODEL || 'deepseek-chat';
-
-        const llmRes = await fetch(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${env.LLM_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0.2,
-            max_tokens: 8192,
-            messages: [
-              {
-                role: 'system',
-                content: '你是一位精通人工智能、计算机科学与科技新闻的专业中英译者。请将用户提供的文章正文准确、流畅地翻译为简体中文。\n要求：\n1. 严格忠实原文，不遗漏关键数据、实验结论与技术细节，不擅自发挥。\n2. 保留常见专业英文术语（如 LLM、Agent、Transformer、Benchmark、API、Fine-tuning 等）或采用业内通用译法。\n3. 保持原有的段落与小标题结构，使用简洁的 Markdown（如 ## 标题、加粗、列表）输出，不要输出任何开场白或解释。',
-              },
-              {
-                role: 'user',
-                content: safeSlice(text, 24000),
-              },
-            ],
-          }),
-        });
-
-        if (!llmRes.ok) {
-          const errText = await llmRes.text();
-          throw new Error(`模型接口报错 (${llmRes.status}): ${errText.slice(0, 120)}`);
-        }
-
-        const data = await llmRes.json();
-        const translated = data?.choices?.[0]?.message?.content?.trim();
+        const translated = await translateLongMarkdown(
+          text,
+          '你是一位精通人工智能、计算机科学与科技新闻的专业中英译者。请将用户提供的文章正文准确、流畅地翻译为简体中文。\n要求：\n1. 严格忠实原文，不遗漏关键数据、实验结论与技术细节，不擅自发挥。\n2. 保留常见专业英文术语（如 LLM、Agent、Transformer、Benchmark、API、Fine-tuning 等）或采用业内通用译法。\n3. 保持原有的段落与小标题结构，使用简洁的 Markdown（如 ## 标题、加粗、列表）输出，不要输出任何开场白或解释。\n4. 完整保留原文中的图片 ![说明](URL) 以及视频、音频链接，不要删除或改写媒体链接。',
+          env
+        );
         if (!translated) throw new Error('模型未返回有效译文');
 
         if (articleUrl && !isBlockedContent(translated)) {
           const savePromise = env.DB.prepare(
-            'UPDATE articles SET content_zh = ? WHERE url = ? AND (content_zh IS NULL OR content_zh = "")'
-          ).bind(translated, articleUrl).run().catch(() => {});
+            'UPDATE articles SET content_zh = ? WHERE url = ? AND (content_zh IS NULL OR content_zh = "" OR LENGTH(content_zh) < LENGTH(?))'
+          ).bind(translated, articleUrl, translated).run().catch(() => {});
           if (ctx?.waitUntil) ctx.waitUntil(savePromise);
         }
 
@@ -853,18 +1016,18 @@ export default {
       }
     }
 
-    // 8. 纯享阅读中转（优先读取 D1 预翻译缓存秒开，未命中则降级为实时抓取 + AI 翻译）
+    // 8. 纯享阅读中转（支持图片、音频、视频渲染 + D1 预翻译缓存秒开 + 实时抓取兜底）
     if (url.pathname === '/api/read' && request.method === 'GET') {
       const targetUrl = url.searchParams.get('url');
       if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
         return new Response('无效的文章链接', { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
       }
 
-      const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const escapeHtml = escapeHtmlBasic;
       let title = '纯享阅读';
       let articleHtml = '';
 
-      // 优先从 D1 读取有效的预翻译中文正文（秒开，且跳过误存的拦截页缓存）
+      // 优先从 D1 读取有效的预翻译中文正文
       try {
         const cached = await env.DB.prepare(
           'SELECT title, content_zh FROM articles WHERE url = ? AND content_zh IS NOT NULL AND content_zh != "" ORDER BY report_date DESC LIMIT 1'
@@ -872,39 +1035,6 @@ export default {
 
         if (cached && cached.content_zh && !isBlockedContent(cached.content_zh)) {
           const cachedTitle = cached.title || '纯享阅读';
-          const renderMdServer = (md) => {
-            const inline = (s) => escapeHtml(s)
-              .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-              .replace(/`([^`]+)`/g, '<code>$1</code>')
-              .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_, alt, src) => `<img src="/api/img?url=${encodeURIComponent(src)}" alt="${alt}" loading="lazy" />`)
-              .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-            const lines = md.split(/\r?\n/);
-            let html = '', inUl = false, inOl = false;
-            const closeLists = () => {
-              if (inUl) { html += '</ul>'; inUl = false; }
-              if (inOl) { html += '</ol>'; inOl = false; }
-            };
-            for (const raw of lines) {
-              const line = raw.trim();
-              if (!line) { closeLists(); continue; }
-              if (/^###\s+/.test(line)) { closeLists(); html += '<h3>' + inline(line.replace(/^###\s+/, '')) + '</h3>'; }
-              else if (/^##\s+/.test(line)) { closeLists(); html += '<h2>' + inline(line.replace(/^##\s+/, '')) + '</h2>'; }
-              else if (/^#\s+/.test(line)) { closeLists(); html += '<h1>' + inline(line.replace(/^#\s+/, '')) + '</h1>'; }
-              else if (/^>\s*/.test(line)) { closeLists(); html += '<blockquote>' + inline(line.replace(/^>\s*/, '')) + '</blockquote>'; }
-              else if (/^[-*]\s+/.test(line)) {
-                if (inOl) { html += '</ol>'; inOl = false; }
-                if (!inUl) { html += '<ul>'; inUl = true; }
-                html += '<li>' + inline(line.replace(/^[-*]\s+/, '')) + '</li>';
-              } else if (/^\d+\.\s+/.test(line)) {
-                if (inUl) { html += '</ul>'; inUl = false; }
-                if (!inOl) { html += '<ol>'; inOl = true; }
-                html += '<li>' + inline(line.replace(/^\d+\.\s+/, '')) + '</li>';
-              } else { closeLists(); html += '<p>' + inline(line) + '</p>'; }
-            }
-            closeLists();
-            return html;
-          };
-
           const instantHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -917,7 +1047,6 @@ export default {
     .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid #f0f0ef; font-size: 14px; }
     .top-bar a { color: #2563eb; text-decoration: none; font-weight: 500; }
     article { font-size: 15px; line-height: 1.85; letter-spacing: 0.02em; word-break: break-word; }
-    article img { max-width: 100%; height: auto; display: block; margin: 16px auto; border-radius: 8px; }
     article h1 { font-size: 20px; line-height: 1.4; font-weight: 700; margin: 8px 0 20px; color: #111827; }
     article h2 { font-size: 16px; line-height: 1.45; font-weight: 600; margin: 28px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #f3f4f6; color: #111827; }
     article h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; color: #374151; }
@@ -927,6 +1056,12 @@ export default {
     article blockquote { margin: 16px 0; padding: 10px 14px; background: #f9fafb; border-left: 3px solid #2563eb; color: #4b5563; border-radius: 0 6px 6px 0; }
     article pre, article code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     article a { color: #2563eb; text-decoration: none; border-bottom: 1px solid #bfdbfe; }
+    .media-block { margin: 18px 0; text-align: center; }
+    .media-block img, .media-block video { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0 auto; }
+    .media-block audio { width: 100%; max-width: 520px; }
+    .video-frame { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; background: #000; }
+    .video-frame iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+    .media-block figcaption { margin-top: 6px; font-size: 12px; color: #6b7280; }
   </style>
 </head>
 <body>
@@ -937,7 +1072,7 @@ export default {
     </div>
     <article>
       <h1>${escapeHtml(cachedTitle)}</h1>
-      ${renderMdServer(cached.content_zh)}
+      ${renderRichMarkdown(cached.content_zh, escapeHtml)}
     </article>
   </div>
   <script>
@@ -965,7 +1100,7 @@ export default {
       }
 
       try {
-        // 1. 优先尝试通过 Jina Reader 提取正文（10 秒超时）
+        // 1. 优先尝试通过 Jina Reader 提取正文（保留音视频链接）
         try {
           const jinaHeaders = {
             'Accept': 'text/plain',
@@ -987,25 +1122,20 @@ export default {
                 .split('\n')
                 .filter((line) => {
                   const trimmed = line.trim();
+                  if (/\.(?:mp4|webm|mov|m3u8|mp3|wav|ogg|m4a|aac)(?:\?|$)/i.test(trimmed) || /(?:youtube\.com\/watch|youtu\.be\/)/i.test(trimmed)) {
+                    return true;
+                  }
                   if (/^[-*•]\s*\[.*?\]\(https?:\/\/.*?\)$/.test(trimmed)) return false;
                   if (/^(Sign in|Log in|Sign up|Subscribe|Accept all cookies|Share this|Related articles)/i.test(trimmed)) return false;
                   return true;
                 })
                 .join('\n');
-              articleHtml = '<p>' + escapeHtml(md)
-                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_, alt, src) => `<img src="/api/img?url=${encodeURIComponent(src)}" alt="${alt}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:12px 0;" />`)
-                .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-                .replace(/\n{2,}/g, '</p><p>')
-                .replace(/\n/g, '<br/>') + '</p>';
+              articleHtml = renderRichMarkdown(md, escapeHtml);
             }
           }
         } catch {}
 
-        // 2. 兜底：直连抓取原文并清洗标签（8 秒超时 + 截断超大 HTML 防 CPU 超限）
+        // 2. 兜底：直连抓取原文并保留音视频与图片
         if (!articleHtml) {
           const res = await fetch(targetUrl, {
             headers: {
@@ -1022,6 +1152,7 @@ export default {
           const titleMatch = rawHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
           if (titleMatch) title = titleMatch[1].replace(/\s+/g, ' ').trim();
 
+          const mediaExtra = extractMediaMarkersFromHtml(rawHtml);
           const mainMatch = rawHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
             || rawHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
             || rawHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
@@ -1032,15 +1163,15 @@ export default {
             .replace(/<(script|style|noscript|iframe|svg|nav|header|footer|aside|form|button)[^>]*>[\s\S]*?<\/\1>/gi, '')
             .replace(/<!--[\s\S]*?-->/g, '')
             .replace(/<(p|div|h[1-6]|li|blockquote|br)[^>]*>/gi, '\n<$1>')
-            .replace(/<(?!\/?(p|h[1-6]|strong|b|em|i|ul|ol|li|blockquote|pre|code|br|a|img)\b)[^>]+>/gi, '')
+            .replace(/<(?!\/?(p|h[1-6]|strong|b|em|i|ul|ol|li|blockquote|pre|code|br|a|img|video|audio|source)\b)[^>]+>/gi, '')
             .replace(/\s+on\w+="[^"]*"/gi, '')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
 
-          articleHtml = `<h1>${escapeHtml(title)}</h1>` + body;
+          articleHtml = `<h1>${escapeHtml(title)}</h1>` + body + (mediaExtra ? renderRichMarkdown(mediaExtra, escapeHtml) : '');
         }
 
-        // 3. 若命中反爬/付费墙，直接提示前往原网页阅读，避免送去翻译
+        // 3. 若命中反爬/付费墙，直接提示前往原网页阅读
         const plainCheck = articleHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         if (isBlockedContent(plainCheck)) {
           return new Response(
@@ -1056,13 +1187,24 @@ export default {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>${escapeHtml(title)} - 纯享阅读</title>
   <style>
-    article img {
+    article img, article video {
       max-width: 100%;
       height: auto;
       display: block;
       margin: 16px auto;
       border-radius: 8px;
     }
+    article audio {
+      width: 100%;
+      max-width: 520px;
+      margin: 12px 0;
+    }
+    .media-block { margin: 18px 0; text-align: center; }
+    .media-block img, .media-block video { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0 auto; }
+    .media-block audio { width: 100%; max-width: 520px; }
+    .video-frame { position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; background: #000; }
+    .video-frame iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+    .media-block figcaption { margin-top: 6px; font-size: 12px; color: #6b7280; }
     html, body {
       -webkit-text-size-adjust: 100% !important;
       text-size-adjust: 100% !important;
@@ -1184,7 +1326,6 @@ export default {
   </div>
 
   <script>
-    // 1. 强制锁定微信内置浏览器字号
     (function() {
       function lockFontSize() {
         WeixinJSBridge.invoke('setFontSizeCallback', { 'fontSize': 0 });
@@ -1199,7 +1340,6 @@ export default {
       }
     })();
 
-    // 2. 完整 Markdown 渲染 + 自动/手动 AI 翻译
     (function() {
       const origEl = document.getElementById('orig-content');
       const zhEl = document.getElementById('zh-content');
@@ -1214,9 +1354,25 @@ export default {
 
       function renderMarkdown(md) {
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const inline = (s) => esc(s)
-          .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-          .replace(/\\x60([^\\x60]+)\\x60/g, '<code>$1</code>');
+        const inline = (s) => {
+          let out = esc(s);
+          out = out.replace(
+            /!\\[([^\\]]*)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g,
+            (_, alt, src) => '<figure class="media-block"><img src="/api/img?url=' + encodeURIComponent(src) + '" alt="' + esc(alt) + '" loading="lazy" /><figcaption>' + esc(alt || '配图') + '</figcaption></figure>'
+          );
+          out = out.replace(
+            /\\[([^\\]]*)\\]\\((https?:\\/\\/[^\\s)]+\\.(?:mp4|webm|mov|m3u8)(?:\\?[^\\s)]*)?)\\)/gi,
+            (_, label, vUrl) => '<figure class="media-block"><video controls preload="metadata" playsinline src="' + esc(vUrl) + '"></video><figcaption>' + esc(label || '视频播放') + '</figcaption></figure>'
+          );
+          out = out.replace(
+            /\\[([^\\]]*)\\]\\((https?:\\/\\/[^\\s)]+\\.(?:mp3|wav|ogg|m4a|aac)(?:\\?[^\\s)]*)?)\\)/gi,
+            (_, label, aUrl) => '<figure class="media-block"><audio controls preload="metadata" src="' + esc(aUrl) + '"></audio><figcaption>' + esc(label || '音频播放') + '</figcaption></figure>'
+          );
+          out = out.replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+          out = out.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
+          out = out.replace(/\\x60([^\\x60]+)\\x60/g, '<code>$1</code>');
+          return out;
+        };
 
         const lines = md.split(/\\r?\\n/);
         let html = '';
@@ -1231,6 +1387,26 @@ export default {
         for (let raw of lines) {
           const line = raw.trim();
           if (!line) { closeLists(); continue; }
+
+          const ytMatch = line.match(/^(?:https?:\\/\\/)?(?:www\\.)?(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/)([A-Za-z0-9_-]{6,})/);
+          if (ytMatch) {
+            closeLists();
+            const vid = ytMatch[1];
+            html += '<figure class="media-block"><div class="video-frame"><iframe src="https://www.youtube.com/embed/' + esc(vid) + '" title="YouTube video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div><figcaption><a href="https://www.youtube.com/watch?v=' + esc(vid) + '" target="_blank" rel="noopener">在 YouTube 中打开视频 ↗</a></figcaption></figure>';
+            continue;
+          }
+
+          if (/^https?:\\/\\/\\S+\\.(?:mp4|webm|mov|m3u8)(?:\\?\\S*)?$/i.test(line)) {
+            closeLists();
+            html += '<figure class="media-block"><video controls preload="metadata" playsinline src="' + esc(line) + '"></video><figcaption>视频播放</figcaption></figure>';
+            continue;
+          }
+
+          if (/^https?:\\/\\/\\S+\\.(?:mp3|wav|ogg|m4a|aac)(?:\\?\\S*)?$/i.test(line)) {
+            closeLists();
+            html += '<figure class="media-block"><audio controls preload="metadata" src="' + esc(line) + '"></audio><figcaption>音频播放</figcaption></figure>';
+            continue;
+          }
 
           if (/^###\\s+/.test(line)) {
             closeLists();
@@ -1324,7 +1500,6 @@ export default {
           },
         });
       } catch (err) {
-        // 返回 200 状态码，防止 Cloudflare 代理劫持为默认 502 Bad Gateway 页面
         return new Response(
           `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>纯享模式暂不支持该网页</title></head><body style="font-family:-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:20px;line-height:1.7;color:#1f2937;"><a href="javascript:history.back()" style="color:#2563eb;text-decoration:none;">← 返回简报</a><div style="margin-top:24px;padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;"><h3 style="margin:0 0 8px;">纯享模式暂不支持该网页</h3><p style="margin:0 0 16px;font-size:14px;color:#6b7280;">原因：${escapeHtml(err.message)}。建议直接前往原网页阅读。</p><a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">前往原网页阅读 ↗</a></div></body></html>`,
           { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
