@@ -26,85 +26,78 @@ function isAuthorized(request, env) {
  * 根据用户偏好关键词，实时抓取 Bing News RSS（自动提取真实原文链接）并由 DeepSeek 质检打分
  */
 async function fetchPersonalizedNews(likeKws, prefText, env) {
-  const debug = { step: 'init', rssStatuses: [], rawCount: 0, llmStatus: null, err: null };
+  const debug = { step: 'init', sources: [], rawCount: 0, llmStatus: null, err: null };
   if (!likeKws || likeKws.length === 0 || !env.LLM_API_KEY) {
     debug.step = 'missing_params';
     return { articles: [], debug };
   }
 
-  // 1. 构造搜索词并依次尝试 RSS 源
-  const query = encodeURIComponent(likeKws.slice(0, 2).join(' OR '));
-  const rssUrls = [
-    `https://www.bing.com/news/search?q=${query}&format=rss&mkt=zh-CN`,
-    `https://news.google.com/rss/search?q=${query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`,
-  ];
-
-  let xmlText = '';
-  for (const rssUrl of rssUrls) {
-    try {
-      const rssRes = await fetch(rssUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-      });
-      const text = await rssRes.text();
-      const hasItem = text.includes('<item>');
-      debug.rssStatuses.push({ url: rssUrl.slice(0, 35), status: rssRes.status, len: text.length, hasItem });
-      if (rssRes.ok && hasItem) {
-        xmlText = text;
-        break;
-      }
-    } catch (e) {
-      debug.rssStatuses.push({ url: rssUrl.slice(0, 35), err: e.message });
-    }
-  }
-  if (!xmlText) {
-    debug.step = 'rss_empty';
-    return { articles: [], debug };
-  }
-
-  // 2. 解析 RSS
+  // 优先挑出英文关键词（适合科技/全球新闻接口），没有则用第一个词
+  const enKw = likeKws.find((k) => /^[a-zA-Z0-9\s\-+.]+$/.test(k)) || likeKws[0];
   const rawItems = [];
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-  let match;
-  while ((match = itemRegex.exec(xmlText)) !== null && rawItems.length < 12) {
-    const block = match[1];
-    const title = (
-      block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)?.[1] ||
-      block.match(/<title>([\s\S]*?)<\/title>/)?.[1] ||
-      ''
-    ).replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim();
+  const seenUrls = new Set();
 
-    const desc = (
-      block.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)?.[1] ||
-      block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ||
-      ''
-    ).replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim().slice(0, 200);
-
-    const rawLink = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '').replace(/&amp;/g, '&').trim();
-    let realUrl = rawLink;
-    try {
-      const extracted = new URL(rawLink).searchParams.get('url');
-      if (extracted) realUrl = extracted;
-    } catch {}
-
-    const source = (
-      block.match(/<News:Source>([\s\S]*?)<\/News:Source>/)?.[1] ||
-      block.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] ||
-      '全网实时'
-    ).trim();
-
-    if (title && realUrl) {
-      rawItems.push({ title, snippet: desc, url: realUrl, sourceName: source });
+  // 1. 数据源 A：Hacker News Algolia API（近 14 天高相关科技/AI 资讯，极稳）
+  try {
+    const sinceTs = Math.floor(Date.now() / 1000) - 14 * 86400;
+    const hnUrl = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(enKw)}&tags=story&numericFilters=created_at_i>${sinceTs}&hitsPerPage=8`;
+    const hnRes = await fetch(hnUrl);
+    if (hnRes.ok) {
+      const hnData = await hnRes.json();
+      const hits = hnData.hits || [];
+      debug.sources.push({ name: 'hn', status: hnRes.status, count: hits.length });
+      for (const h of hits) {
+        const url = h.url || `https://news.ycombinator.com/item?id=${h.objectID}`;
+        if (h.title && !seenUrls.has(url)) {
+          seenUrls.add(url);
+          rawItems.push({
+            title: h.title,
+            snippet: h.story_text ? h.story_text.slice(0, 200) : `Hacker News 热度 ${h.points || 0}`,
+            url,
+            sourceName: 'Hacker News',
+          });
+        }
+      }
+    } else {
+      debug.sources.push({ name: 'hn', status: hnRes.status });
     }
+  } catch (e) {
+    debug.sources.push({ name: 'hn', err: e.message });
   }
+
+  // 2. 数据源 B：GDELT 2.0 全球新闻开放 API（补充主流媒体报道）
+  try {
+    const gdeltUrl = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(enKw)}&mode=artlist&maxrecords=8&format=json&sort=datedesc`;
+    const gdRes = await fetch(gdeltUrl);
+    if (gdRes.ok) {
+      const gdData = await gdRes.json();
+      const arts = gdData.articles || [];
+      debug.sources.push({ name: 'gdelt', status: gdRes.status, count: arts.length });
+      for (const a of arts) {
+        if (a.title && a.url && !seenUrls.has(a.url)) {
+          seenUrls.add(a.url);
+          rawItems.push({
+            title: a.title,
+            snippet: a.domain || '',
+            url: a.url,
+            sourceName: a.domain || '全球新闻',
+          });
+        }
+      }
+    } else {
+      debug.sources.push({ name: 'gdelt', status: gdRes.status });
+    }
+  } catch (e) {
+    debug.sources.push({ name: 'gdelt', err: e.message });
+  }
+
   debug.rawCount = rawItems.length;
   if (rawItems.length === 0) {
-    debug.step = 'parse_empty';
+    debug.step = 'sources_empty';
     return { articles: [], debug };
   }
 
-  // 3. DeepSeek 质检
+  // 3. 交给 DeepSeek 质检、去重并翻译为中文简报
   const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
   try {
     const llmRes = await fetch(`${baseUrl}/chat/completions`, {
@@ -121,8 +114,8 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
           {
             role: 'system',
             content: `你是专业的 AI 与科技情报主编。用户偏好为：「${prefText}」。
-请从候选新闻（含标题与摘要）中筛选出与用户偏好高度相关且有信息增量的文章（1~4 篇；若全部是纯广告或毫无关联再返回 []）。
-标准：综合评分 >= 3.8（5分制），过滤纯水文与无实质内容的广告。
+请从候选新闻（可能为英文）中筛选出与用户偏好高度相关且有信息增量的文章（1~4 篇），并翻译总结为流畅的简体中文。
+标准：综合评分 >= 3.8（5分制），过滤纯水文与无关内容。
 严格返回 JSON：
 {
   "articles": [
@@ -138,7 +131,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
   ]
 }`,
           },
-          { role: 'user', content: JSON.stringify(rawItems) },
+          { role: 'user', content: JSON.stringify(rawItems.slice(0, 12)) },
         ],
       }),
     });
