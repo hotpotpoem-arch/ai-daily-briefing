@@ -131,6 +131,96 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     : [];
 }
 
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
+    // 导出双偏好汇总（供每日定时任务 pipeline.py 拉取）
+    if (url.pathname === '/api/export-prefs' && request.method === 'GET') {
+      if (!isAuthorized(request, env)) {
+        return jsonResp({ error: 'Unauthorized' }, 401);
+      }
+
+      try {
+        // 1. 读取手动填写的文本偏好与关键词
+        const { results: prefRows } = await env.DB.prepare(
+          'SELECT pref_text, like_keywords, dislike_keywords FROM user_prefs'
+        ).all();
+
+        const prefTexts = [];
+        const likeKws = new Set();
+        const dislikeKws = new Set();
+
+        for (const r of prefRows || []) {
+          if (r.pref_text) prefTexts.push(r.pref_text.trim());
+          try {
+            JSON.parse(r.like_keywords || '[]').forEach((k) => likeKws.add(k));
+            JSON.parse(r.dislike_keywords || '[]').forEach((k) => dislikeKws.add(k));
+          } catch {}
+        }
+
+        // 2. 统计点击「感兴趣 / 不感兴趣」累积的标签权重
+        const { results: fbRows } = await env.DB.prepare(
+          'SELECT category, tags, action FROM user_feedback'
+        ).all();
+
+        const tagScores = {};
+        for (const r of fbRows || []) {
+          const delta = r.action === 'like' || r.action === 'up' ? 1 : -1;
+          let tags = [];
+          try { tags = JSON.parse(r.tags || '[]'); } catch {}
+          for (const t of tags) {
+            tagScores[t] = (tagScores[t] || 0) + delta;
+          }
+        }
+
+        const topLikedTags = Object.entries(tagScores)
+          .filter(([, score]) => score > 0)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([tag]) => tag);
+
+        const topDislikedTags = Object.entries(tagScores)
+          .filter(([, score]) => score < 0)
+          .sort((a, b) => a[1] - b[1])
+          .slice(0, 10)
+          .map(([tag]) => tag);
+
+        return jsonResp({
+          prefTexts,
+          likeKeywords: Array.from(likeKws),
+          dislikeKeywords: Array.from(dislikeKws),
+          topLikedTags,
+          topDislikedTags,
+        });
+      } catch (err) {
+        return jsonResp({ error: err.message }, 500);
+      }
+    }
+
+    // 0. 读取/保存用户自定义文本偏好（保存时自动用 DeepSeek 提取中英文关键词）
+    if (url.pathname === '/api/prefs') {
+      const uid = (url.searchParams.get('uid') || 'default').trim();
+
+      if (request.method === 'GET') {
+        try {
+          const row = await env.DB.prepare(
+            'SELECT pref_text, like_keywords, dislike_keywords FROM user_prefs WHERE uid = ?'
+          ).bind(uid).first();
+          return jsonResp({
+            uid,
+            prefText: row?.pref_text || '',
+            likeKeywords: JSON.parse(row?.like_keywords || '[]'),
+            dislikeKeywords: JSON.parse(row?.dislike_keywords || '[]'),
+          });
+        } catch (err) {
+          return jsonResp({ error: err.message }, 500);
+        }
+      }
       if (request.method === 'POST') {
         try {
           const body = await request.json();

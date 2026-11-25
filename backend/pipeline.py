@@ -67,33 +67,45 @@ def clean_html(text: str) -> str:
 
 
 def build_preference_prompt() -> str:
-    """读取用户历史点赞/点踩，生成动态偏好指令"""
-    if not PREF_FILE.exists():
+    """从 Cloudflare D1 拉取双偏好（手动设置 + 历史点赞反馈），生成 DeepSeek 提示词"""
+    site_url = os.getenv("SITE_URL", "").rstrip("/")
+    secret = os.getenv("INGEST_SECRET", "")
+    if not site_url or not secret:
         return ""
 
     try:
-        prefs = json.loads(PREF_FILE.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
+        resp = httpx.get(
+            f"{site_url}/api/export-prefs",
+            headers={"Authorization": f"Bearer {secret}"},
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            return ""
+        data = resp.json()
+    except Exception as e:
+        print(f"[个性化] 拉取 D1 偏好失败，跳过注入: {e}")
         return ""
 
-    liked = prefs.get("liked", [])
-    disliked = prefs.get("disliked", [])
-    if not liked and not disliked:
+    lines = []
+    if data.get("prefTexts"):
+        lines.append(f"- 用户明确关注方向：{'；'.join(data['prefTexts'])}")
+    if data.get("likeKeywords"):
+        lines.append(f"- 核心关注关键词：{', '.join(data['likeKeywords'][:15])}")
+    if data.get("topLikedTags"):
+        lines.append(f"- 历史高频点赞主题：{', '.join(data['topLikedTags'])}")
+    if data.get("dislikeKeywords") or data.get("topDislikedTags"):
+        dislikes = list(set(data.get("dislikeKeywords", []) + data.get("topDislikedTags", [])))
+        lines.append(f"- 用户不感兴趣/屏蔽主题：{', '.join(dislikes[:10])}")
+
+    if not lines:
         return ""
 
-    lines = ["\n\n【用户历史个性化偏好（请在筛选和排序时重点参考）】"]
-    if liked:
-        liked_str = "；".join(
-            f"{x['title']}({','.join(x.get('tags', []))})" for x in liked
-        )
-        lines.append(f"- 用户感兴趣的内容：{liked_str}")
-    if disliked:
-        disliked_str = "；".join(
-            f"{x['title']}({','.join(x.get('tags', []))})" for x in disliked
-        )
-        lines.append(f"- 用户不感兴趣的内容（尽量避开类似主题）：{disliked_str}")
-
-    return "\n".join(lines)
+    return (
+        "\n\n【读者长期个性化偏好（在保证高质量的前提下优先倾斜）】\n"
+        + "\n".join(lines)
+        + "\n注意：命中关注方向或点赞主题的优质文章可适当提高入选优先级和评分；"
+          "命中屏蔽主题的普通资讯请直接过滤（除非是 4.7 分以上的全行业特大新闻）。"
+    )
 
 def load_recent_history(url_days: int = 7, title_days: int = 3) -> tuple[set[str], list[str]]:
     """从 briefings.json 读取近期已推送的 URL 和标题，用于跨天去重"""
