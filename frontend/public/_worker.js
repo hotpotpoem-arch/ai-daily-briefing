@@ -18,6 +18,93 @@ function isAuthorized(request, env) {
   return request.headers.get('Authorization') === `Bearer ${secret}`;
 }
 
+
+/**
+ * 根据用户偏好关键词，实时抓取 Google News RSS 并由 DeepSeek 质检打分与翻译
+ */
+async function fetchPersonalizedNews(likeKws, prefText, env) {
+  if (!likeKws || likeKws.length === 0 || !env.LLM_API_KEY) return [];
+
+  // 1. 拼接前 3 个核心偏好词去 Google News 搜近 3 天最新资讯
+  const query = encodeURIComponent(`(${likeKws.slice(0, 3).join(' OR ')}) when:3d`);
+  const rssUrl = `https://news.google.com/rss/search?q=${query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`;
+
+  let xmlText = '';
+  try {
+    const rssRes = await fetch(rssUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!rssRes.ok) return [];
+    xmlText = await rssRes.text();
+  } catch {
+    return [];
+  }
+
+  // 2. 轻量解析 RSS 里的标题、链接、来源（最多取前 12 条给 AI 质检）
+  const rawItems = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+  let match;
+  while ((match = itemRegex.exec(xmlText)) !== null && rawItems.length < 12) {
+    const block = match[1];
+    const title = (block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)?.[1] ||
+                   block.match(/<title>([\s\S]*?)<\/title>/)?.[1] || '').trim();
+    const link = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '').trim();
+    const source = (block.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] || '全网实时').trim();
+    if (title && link) {
+      rawItems.push({ title, url: link, sourceName: source });
+    }
+  }
+  if (rawItems.length === 0) return [];
+
+  // 3. 交给 DeepSeek 严格质检：质量达标（>= 3.8）才保留，绝不硬凑
+  const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '');
+  const llmRes = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${env.LLM_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: env.LLM_MODEL || 'deepseek-chat',
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content: `你是严格的 AI 行业情报主编。用户偏好为：「${prefText}」。
+请从候选新闻中筛选出**真正高质量且与用户偏好高度相关**的文章（0~4 篇，宁缺毋滥，如果质量都一般就返回空数组 []）。
+标准：综合评分 >= 3.8（5分制），坚决过滤水文、纯公关软文、无实质内容的快讯。
+严格返回 JSON：
+{
+  "articles": [
+    {
+      "category": "前沿发布 | 深度解读 | 行业动态",
+      "title": "精炼准确的中文标题",
+      "tldr": "50-70字中文核心要点",
+      "tags": ["标签1", "标签2"],
+      "url": "原样保留链接",
+      "sourceName": "原样保留来源",
+      "score": 4.2
+    }
+  ]
+}`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(rawItems),
+        },
+      ],
+    }),
+  });
+
+  if (!llmRes.ok) return [];
+  const llmData = await llmRes.json();
+  const parsed = JSON.parse(llmData.choices?.[0]?.message?.content || '{}');
+  return Array.isArray(parsed.articles)
+    ? parsed.articles.filter((a) => Number(a.score) >= 3.8)
+    : [];
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -133,6 +220,46 @@ export default {
             JSON.stringify(dislikeKeywords)
           ).run();
 
+          // 实时全网搜索并质检专属高质量资讯，写入当天简报
+          let addedCount = 0;
+          if (likeKws.length > 0) {
+            const latestRow = await env.DB.prepare(
+              `SELECT report_date FROM articles ORDER BY report_date DESC LIMIT 1`
+            ).first();
+
+            if (latestRow?.report_date) {
+              const targetDate = latestRow.report_date;
+              const newArticles = await fetchPersonalizedNews(likeKws, prefText, env);
+
+              // 先清理该用户当天旧的专属搜索文章，再写入新的
+              await env.DB.prepare(
+                `DELETE FROM articles WHERE report_date = ? AND target_uid = ?`
+              ).bind(targetDate, uid).run();
+
+              for (let i = 0; i < newArticles.length; i++) {
+                const art = newArticles[i];
+                const artId = `pref_${uid.slice(0, 6)}_${Date.now()}_${i}`;
+                await env.DB.prepare(
+                  `INSERT OR REPLACE INTO articles
+                   (id, report_date, category, title, tldr, tags, url, source_name, score, target_uid)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                ).bind(
+                  artId,
+                  targetDate,
+                  art.category || '行业动态',
+                  art.title,
+                  art.tldr || '',
+                  JSON.stringify(art.tags || []),
+                  art.url,
+                  art.sourceName || '全网实时',
+                  Number(art.score) || 4.0,
+                  uid
+                ).run();
+                addedCount++;
+              }
+            }
+          }
+
           return jsonResp({ ok: true, uid: targetUid, prefText, likeKeywords, dislikeKeywords });
         } catch (err) {
           return jsonResp({ error: err.message }, 500);
@@ -206,6 +333,7 @@ export default {
     // 2. 获取个性化重排后的简报
     if (url.pathname === '/api/briefing' && request.method === 'GET') {
       try {
+        
         const uid = (url.searchParams.get('uid') || 'default').trim();
         const reqDate = url.searchParams.get('date');
 
@@ -221,10 +349,10 @@ export default {
 
         const targetDate = reqDate && dates.includes(reqDate) ? reqDate : dates[0];
 
-        // 查询当天公共文章池
-        const { results: articleRows } = await env.DB.prepare(
-          'SELECT * FROM articles WHERE report_date = ?'
-        ).bind(targetDate).all();
+       // 查询当天公共文章池 + 当前用户的专属搜索文章
+          const { results: articleRows } = await env.DB.prepare(
+            `SELECT * FROM articles WHERE report_date = ? AND (target_uid IS NULL OR target_uid = 'all' OR target_uid = ?) ORDER BY score DESC`
+          ).bind(targetDate, uid).all();
 
         // 查询该用户的全部历史偏好，计算标签与分类权重
         // 查询该用户的自定义文本偏好
@@ -270,8 +398,11 @@ export default {
           }
           // ↓ 插入在第 271 行这里：计算自定义文本偏好的加分/减分
           const searchText = `${row.title || ''} ${row.tldr || ''} ${tags.join(' ')}`.toLowerCase();
-          let matchedPref = false;
+          let matchedPref = row.target_uid === uid;
           let matchedDislike = false;
+          if (row.target_uid === uid) {
+            boost += 2.0;
+          }
           for (const kw of likeKws) {
             if (kw && searchText.includes(kw)) {
               boost += 1.2;
@@ -302,25 +433,10 @@ export default {
           };
         });
 
-        const CORE_SCORE = 4.0; // 公共必看质量线（5分制）
-
-          // 1. 公共重磅：达到 4.0 分，且未被用户屏蔽（4.7 分以上特大新闻强制保留）
-          const coreArticles = articles.filter((a) => {
-            if (a.score < CORE_SCORE) return false;
-            if (a.matchedDislike && a.score < 4.7) return false;
-            return true;
-          });
-
-          // 2. 专属新增：备选池（3.5 ~ 3.9 分）中命中用户偏好的高质量文章
-          const extraPrefArticles = articles
-            .filter((a) => a.score < CORE_SCORE && a.matchedPref && !a.matchedDislike)
-            .sort((a, b) => b._rankScore - a._rankScore)
-            .slice(0, 6);
-
-          // 3. 合并并按综合分排序
-          const finalArticles = [...coreArticles, ...extraPrefArticles].sort(
-            (a, b) => b._rankScore - a._rankScore
-          );
+        // 只要不是被用户明确屏蔽的普通文章，全部保留展示；专属文章置顶
+          const finalArticles = articles
+            .filter((a) => !(a.matchedDislike && a.score < 4.7))
+            .sort((a, b) => b._rankScore - a._rankScore);
 
           const cleanArticles = finalArticles.map(({ _rankScore, matchedDislike, ...rest }) => rest);
 
