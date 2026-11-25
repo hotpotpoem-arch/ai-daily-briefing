@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Calendar, Cpu, RefreshCw, TrendingUp, Search, Sparkles, Clock, FileText, X, User } from 'lucide-react';
+import { Calendar, Cpu, RefreshCw, TrendingUp, Search, Sparkles, Clock, FileText, X, User, Bell } from 'lucide-react';
 import { ArticleCard } from '@/components/ArticleCard';
 import { DailyReport, FeedbackAction } from '@/types/briefing';
 
@@ -69,6 +69,13 @@ export default function DailyBriefingPage() {
   const [prefInput, setPrefInput] = useState('');
   const [showPrefModal, setShowPrefModal] = useState(false);
   const [isSavingPref, setIsSavingPref] = useState(false);
+
+  // WxPusher 微信订阅弹窗状态
+  const [showSubModal, setShowSubModal] = useState(false);
+  const [qrUrl, setQrUrl] = useState('');
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState('');
+
   const [staticArchive, setStaticArchive] = useState<Record<string, DailyReport>>({});
   const [report, setReport] = useState<DailyReport | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('全部');
@@ -108,9 +115,6 @@ export default function DailyBriefingPage() {
         if (apiRes.ok) {
           const data = await apiRes.json();
           if (data.report && Array.isArray(data.dates) && data.dates.length > 0) {
-            setAvailableDates(data.dates);
-            setReport(data.report);
-            setIsUsingMock(false);
             setAvailableDates(data.dates);
             setReport(data.report);
             setIsUsingMock(false);
@@ -161,18 +165,23 @@ export default function DailyBriefingPage() {
     [showToast]
   );
 
-  // 初始化：解析 URL 中的 ?uid=xxx 或读取 localStorage
+  // 初始化：解析 URL 中的 ?uid=xxx 或读取 localStorage；新访客自动分配独立 uid
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlUid = params.get('uid')?.trim();
-    let activeUid = 'default';
+    let activeUid = '';
 
     if (urlUid) {
       activeUid = urlUid;
       localStorage.setItem('briefing_uid', urlUid);
     } else {
       const savedUid = localStorage.getItem('briefing_uid')?.trim();
-      if (savedUid) activeUid = savedUid;
+      if (savedUid && savedUid !== 'default') {
+        activeUid = savedUid;
+      } else {
+        activeUid = `u_${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem('briefing_uid', activeUid);
+      }
     }
 
     const init = async () => {
@@ -181,6 +190,26 @@ export default function DailyBriefingPage() {
     };
     init();
   }, [fetchBriefing]);
+
+  const handleOpenSubscribe = async (forceRefresh = false) => {
+    setShowSubModal(true);
+    if (qrUrl && !forceRefresh) return;
+
+    setQrLoading(true);
+    setQrError('');
+    try {
+      const res = await fetch(`/api/wxpusher/qrcode?uid=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (!res.ok || !data.qrUrl) {
+        throw new Error(data.error || '生成二维码失败');
+      }
+      setQrUrl(data.qrUrl);
+    } catch (err) {
+      setQrError(err instanceof Error ? err.message : '网络异常，请稍后重试');
+    } finally {
+      setQrLoading(false);
+    }
+  };
 
   const handleDateChange = async (date: string) => {
     setSelectedCategory('全部');
@@ -321,7 +350,7 @@ export default function DailyBriefingPage() {
           <span className="text-sm font-medium">{toast.message}</span>
         </div>
       )}
-      
+
       {/* 个性化偏好设置弹窗 */}
       {showPrefModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm p-4">
@@ -359,6 +388,59 @@ export default function DailyBriefingPage() {
         </div>
       )}
 
+      {/* WxPusher 微信订阅二维码弹窗 */}
+      {showSubModal && (
+        <div
+          onClick={() => setShowSubModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xs rounded-2xl bg-[#FAF9F6] border border-stone-200 shadow-xl p-6 text-center"
+          >
+            <h3 className="text-base font-semibold text-stone-900">
+              微信扫码订阅每日简报
+            </h3>
+            <p className="mt-1.5 text-xs text-stone-500 leading-relaxed">
+              微信扫描下方二维码并关注，每天早上自动推送你的专属 AI 简报
+            </p>
+
+            <div className="mt-4 mb-5 mx-auto w-52 h-52 rounded-xl bg-white border border-stone-200 flex items-center justify-center overflow-hidden p-2">
+              {qrLoading && (
+                <span className="text-xs text-stone-500">正在生成专属二维码...</span>
+              )}
+              {!qrLoading && qrError && (
+                <div className="px-3 space-y-2">
+                  <p className="text-xs text-rose-600">{qrError}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSubscribe(true)}
+                    className="px-3 py-1 rounded-lg border border-stone-300 bg-white text-xs text-stone-700 hover:bg-stone-50 cursor-pointer"
+                  >
+                    重新获取
+                  </button>
+                </div>
+              )}
+              {!qrLoading && !qrError && qrUrl && (
+                <img
+                  src={qrUrl}
+                  alt="微信订阅二维码"
+                  className="w-full h-full object-contain"
+                />
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowSubModal(false)}
+              className="w-full py-2.5 rounded-xl bg-stone-900 text-white text-sm font-medium hover:bg-stone-800 transition-colors cursor-pointer"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 顶部毛玻璃吸顶导航栏 */}
       <header className="sticky top-0 z-30 border-b border-stone-200/80 bg-[#FAF9F6]/85 backdrop-blur-md">
         <div className="mx-auto max-w-5xl px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
@@ -389,7 +471,7 @@ export default function DailyBriefingPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {/* 历史日期选择器 */}
             {availableDates.length > 0 && (
               <div className="relative flex items-center">
@@ -408,6 +490,17 @@ export default function DailyBriefingPage() {
               </div>
             )}
 
+            {/* 微信订阅按钮 */}
+            <button
+              type="button"
+              onClick={() => handleOpenSubscribe()}
+              title="微信订阅每日简报"
+              className="inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-2 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium text-emerald-700 hover:bg-emerald-100 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <Bell className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+              <span className="hidden sm:inline">微信订阅</span>
+            </button>
+
             {/* 同步最新简报按钮 */}
             <button
               onClick={() => fetchBriefing(uid, report?.reportDate, true)}
@@ -422,16 +515,19 @@ export default function DailyBriefingPage() {
                 {isRefreshing ? '同步中...' : '刷新简报'}
               </span>
             </button>
+
+            {/* 偏好设置按钮 */}
             <button
-        type="button"
-        onClick={() => {
-          setPrefInput(userPrefText);
-          setShowPrefModal(true);
-        }}
-        className="px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors"
-      >
-        ⚙️
-      </button>
+              type="button"
+              onClick={() => {
+                setPrefInput(userPrefText);
+                setShowPrefModal(true);
+              }}
+              title="个性化偏好设置"
+              className="px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+            >
+              ⚙️
+            </button>
           </div>
         </div>
       </header>

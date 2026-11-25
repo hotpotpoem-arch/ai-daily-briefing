@@ -39,6 +39,7 @@ jobs:
           WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
           WECOM_BASE_URL: ${{ secrets.WECOM_BASE_URL }}
           WECOM_PROXY: ${{ secrets.WECOM_PROXY }}
+          WXPUSHER_APP_TOKEN: ${{ secrets.WXPUSHER_APP_TOKEN }}
         run: |
           python daily_push.py
 
