@@ -22,17 +22,22 @@ function isAuthorized(request, env) {
 /**
  * 根据用户偏好关键词，实时抓取 Google News RSS 并由 DeepSeek 质检打分与翻译
  */
+/**
+ * 根据用户偏好关键词，实时抓取 Bing News RSS（自动提取真实原文链接）并由 DeepSeek 质检打分
+ */
 async function fetchPersonalizedNews(likeKws, prefText, env) {
   if (!likeKws || likeKws.length === 0 || !env.LLM_API_KEY) return [];
 
-  // 1. 拼接前 3 个核心偏好词去 Google News 搜近 3 天最新资讯
-  const query = encodeURIComponent(`(${likeKws.slice(0, 3).join(' OR ')}) when:3d`);
-  const rssUrl = `https://news.google.com/rss/search?q=${query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`;
+  // 1. 用 Bing News RSS 搜索最新资讯
+  const query = encodeURIComponent(likeKws.slice(0, 3).join(' '));
+  const rssUrl = `https://www.bing.com/news/search?q=${query}&format=rss&mkt=zh-CN`;
 
   let xmlText = '';
   try {
     const rssRes = await fetch(rssUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
     });
     if (!rssRes.ok) return [];
     xmlText = await rssRes.text();
@@ -40,18 +45,39 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     return [];
   }
 
-  // 2. 轻量解析 RSS 里的标题、链接、来源（最多取前 12 条给 AI 质检）
+  // 2. 解析 RSS 并还原真实的原文 URL（去掉 Bing 跳转外壳）
   const rawItems = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
   let match;
   while ((match = itemRegex.exec(xmlText)) !== null && rawItems.length < 12) {
     const block = match[1];
-    const title = (block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)?.[1] ||
-                   block.match(/<title>([\s\S]*?)<\/title>/)?.[1] || '').trim();
-    const link = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '').trim();
-    const source = (block.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] || '全网实时').trim();
-    if (title && link) {
-      rawItems.push({ title, url: link, sourceName: source });
+    const title = (
+      block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/)?.[1] ||
+      block.match(/<title>([\s\S]*?)<\/title>/)?.[1] ||
+      ''
+    )
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .trim();
+
+    const rawLink = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '')
+      .replace(/&amp;/g, '&')
+      .trim();
+
+    // 从 Bing 跳转链接中提取真实原文 URL
+    let realUrl = rawLink;
+    try {
+      const parsedUrl = new URL(rawLink);
+      const extracted = parsedUrl.searchParams.get('url');
+      if (extracted) realUrl = extracted;
+    } catch {}
+
+    const source = (
+      block.match(/<News:Source>([\s\S]*?)<\/News:Source>/)?.[1] || '全网实时'
+    ).trim();
+
+    if (title && realUrl) {
+      rawItems.push({ title, url: realUrl, sourceName: source });
     }
   }
   if (rawItems.length === 0) return [];
@@ -82,7 +108,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
       "title": "精炼准确的中文标题",
       "tldr": "50-70字中文核心要点",
       "tags": ["标签1", "标签2"],
-      "url": "原样保留链接",
+      "url": "必须原样保留原始链接",
       "sourceName": "原样保留来源",
       "score": 4.2
     }
@@ -104,63 +130,6 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     ? parsed.articles.filter((a) => Number(a.score) >= 3.8)
     : [];
 }
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    // 图片代理接口：解决国内免代理加载海外配图慢或裂图问题
-    if (url.pathname === '/api/img') {
-      const imgUrl = url.searchParams.get('url');
-      if (!imgUrl || !/^https?:\/\//i.test(imgUrl)) {
-        return new Response('Invalid image URL', { status: 400 });
-      }
-      try {
-        const imgRes = await fetch(imgUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-          },
-          redirect: 'follow',
-        });
-        if (!imgRes.ok) {
-          return new Response('Image fetch failed', { status: imgRes.status });
-        }
-        const headers = new Headers(imgRes.headers);
-        headers.set('Cache-Control', 'public, max-age=86400'); // 缓存 24 小时
-        headers.set('Access-Control-Allow-Origin', '*');
-        return new Response(imgRes.body, {
-          status: 200,
-          headers,
-        });
-      } catch (e) {
-        return new Response('Image proxy error', { status: 502 });
-      }
-    }
-
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
-    }
-
-
-    // 0. 读取/保存用户自定义文本偏好（保存时自动用 DeepSeek 提取中英文关键词）
-    if (url.pathname === '/api/prefs') {
-      const uid = (url.searchParams.get('uid') || 'default').trim();
-
-      if (request.method === 'GET') {
-        try {
-          const row = await env.DB.prepare(
-            'SELECT pref_text, like_keywords, dislike_keywords FROM user_prefs WHERE uid = ?'
-          ).bind(uid).first();
-          return jsonResp({
-            uid,
-            prefText: row?.pref_text || '',
-            likeKeywords: JSON.parse(row?.like_keywords || '[]'),
-            dislikeKeywords: JSON.parse(row?.dislike_keywords || '[]'),
-          });
-        } catch (err) {
-          return jsonResp({ error: err.message }, 500);
-        }
-      }
 
       if (request.method === 'POST') {
         try {
