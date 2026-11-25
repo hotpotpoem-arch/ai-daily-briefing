@@ -271,6 +271,7 @@ export default {
           // ↓ 插入在第 271 行这里：计算自定义文本偏好的加分/减分
           const searchText = `${row.title || ''} ${row.tldr || ''} ${tags.join(' ')}`.toLowerCase();
           let matchedPref = false;
+          let matchedDislike = false;
           for (const kw of likeKws) {
             if (kw && searchText.includes(kw)) {
               boost += 1.2;
@@ -280,12 +281,14 @@ export default {
           for (const kw of dislikeKws) {
             if (kw && searchText.includes(kw)) {
               boost -= 1.0;
+              matchedDislike = true;
             }
           }
 
           return {
             id: row.id,
             matchedPref,
+            matchedDislike,
             category: row.category,
             title: row.title,
             tldr: row.tldr,
@@ -299,8 +302,27 @@ export default {
           };
         });
 
-        articles.sort((a, b) => b._rankScore - a._rankScore);
-        const cleanArticles = articles.map(({ _rankScore, ...rest }) => rest);
+        const CORE_SCORE = 4.0; // 公共必看质量线（5分制）
+
+          // 1. 公共重磅：达到 4.0 分，且未被用户屏蔽（4.7 分以上特大新闻强制保留）
+          const coreArticles = articles.filter((a) => {
+            if (a.score < CORE_SCORE) return false;
+            if (a.matchedDislike && a.score < 4.7) return false;
+            return true;
+          });
+
+          // 2. 专属新增：备选池（3.5 ~ 3.9 分）中命中用户偏好的高质量文章
+          const extraPrefArticles = articles
+            .filter((a) => a.score < CORE_SCORE && a.matchedPref && !a.matchedDislike)
+            .sort((a, b) => b._rankScore - a._rankScore)
+            .slice(0, 6);
+
+          // 3. 合并并按综合分排序
+          const finalArticles = [...coreArticles, ...extraPrefArticles].sort(
+            (a, b) => b._rankScore - a._rankScore
+          );
+
+          const cleanArticles = finalArticles.map(({ _rankScore, matchedDislike, ...rest }) => rest);
 
         return jsonResp({
           dates,
