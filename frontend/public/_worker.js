@@ -28,24 +28,33 @@ function isAuthorized(request, env) {
 async function fetchPersonalizedNews(likeKws, prefText, env) {
   if (!likeKws || likeKws.length === 0 || !env.LLM_API_KEY) return [];
 
-  // 1. 用 Bing News RSS 搜索最新资讯
-  const query = encodeURIComponent(likeKws.slice(0, 3).join(' '));
-  const rssUrl = `https://www.bing.com/news/search?q=${query}&format=rss&mkt=zh-CN`;
+  // 1. 构造更合理的搜索词（用 OR 避免同时命中多个词导致无结果）
+  const query = encodeURIComponent(likeKws.slice(0, 2).join(' OR '));
+  const rssUrls = [
+    `https://www.bing.com/news/search?q=${query}&format=rss&mkt=zh-CN`,
+    `https://news.google.com/rss/search?q=${query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`,
+  ];
 
   let xmlText = '';
-  try {
-    const rssRes = await fetch(rssUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
-    if (!rssRes.ok) return [];
-    xmlText = await rssRes.text();
-  } catch {
-    return [];
+  for (const rssUrl of rssUrls) {
+    try {
+      const rssRes = await fetch(rssUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+      if (rssRes.ok) {
+        const text = await rssRes.text();
+        if (text.includes('<item>')) {
+          xmlText = text;
+          break;
+        }
+      }
+    } catch {}
   }
+  if (!xmlText) return [];
 
-  // 2. 解析 RSS 并还原真实的原文 URL（去掉 Bing 跳转外壳）
+  // 2. 解析 RSS：提取标题、摘要、真实原文 URL 和来源
   const rawItems = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
   let match;
@@ -60,6 +69,17 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
       .replace(/&quot;/g, '"')
       .trim();
 
+    const desc = (
+      block.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)?.[1] ||
+      block.match(/<description>([\s\S]*?)<\/description>/)?.[1] ||
+      ''
+    )
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .trim()
+      .slice(0, 200);
+
     const rawLink = (block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '')
       .replace(/&amp;/g, '&')
       .trim();
@@ -73,33 +93,36 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     } catch {}
 
     const source = (
-      block.match(/<News:Source>([\s\S]*?)<\/News:Source>/)?.[1] || '全网实时'
+      block.match(/<News:Source>([\s\S]*?)<\/News:Source>/)?.[1] ||
+      block.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] ||
+      '全网实时'
     ).trim();
 
     if (title && realUrl) {
-      rawItems.push({ title, url: realUrl, sourceName: source });
+      rawItems.push({ title, snippet: desc, url: realUrl, sourceName: source });
     }
   }
   if (rawItems.length === 0) return [];
 
-  // 3. 交给 DeepSeek 严格质检：质量达标（>= 3.8）才保留，绝不硬凑
-  const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '');
-  const llmRes = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${env.LLM_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: env.LLM_MODEL || 'deepseek-chat',
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-      messages: [
-        {
-          role: 'system',
-          content: `你是严格的 AI 行业情报主编。用户偏好为：「${prefText}」。
-请从候选新闻中筛选出**真正高质量且与用户偏好高度相关**的文章（0~4 篇，宁缺毋滥，如果质量都一般就返回空数组 []）。
-标准：综合评分 >= 3.8（5分制），坚决过滤水文、纯公关软文、无实质内容的快讯。
+  // 3. 交给 DeepSeek 质检并生成中文摘要
+  const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+  try {
+    const llmRes = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.LLM_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: env.LLM_MODEL || 'deepseek-chat',
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'system',
+            content: `你是专业的 AI 与科技情报主编。用户偏好为：「${prefText}」。
+请从候选新闻（含标题与摘要）中筛选出与用户偏好高度相关且有信息增量的文章（1~4 篇；若全部是纯广告或毫无关联再返回 []）。
+标准：综合评分 >= 3.8（5分制），过滤纯水文与无实质内容的广告。
 严格返回 JSON：
 {
   "articles": [
@@ -114,21 +137,24 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
     }
   ]
 }`,
-        },
-        {
-          role: 'user',
-          content: JSON.stringify(rawItems),
-        },
-      ],
-    }),
-  });
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(rawItems),
+          },
+        ],
+      }),
+    });
 
-  if (!llmRes.ok) return [];
-  const llmData = await llmRes.json();
-  const parsed = JSON.parse(llmData.choices?.[0]?.message?.content || '{}');
-  return Array.isArray(parsed.articles)
-    ? parsed.articles.filter((a) => Number(a.score) >= 3.8)
-    : [];
+    if (!llmRes.ok) return [];
+    const llmData = await llmRes.json();
+    const parsed = JSON.parse(llmData.choices?.[0]?.message?.content || '{}');
+    return Array.isArray(parsed.articles)
+      ? parsed.articles.filter((a) => Number(a.score) >= 3.8)
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 export default {
@@ -319,7 +345,7 @@ export default {
             }
           }
 
-          return jsonResp({ ok: true, uid: targetUid, prefText, likeKeywords, dislikeKeywords });
+          return jsonResp({ ok: true, uid: targetUid, prefText, likeKeywords, dislikeKeywords, addedCount });
         } catch (err) {
           return jsonResp({ error: err.message }, 500);
         }
