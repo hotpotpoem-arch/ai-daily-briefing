@@ -1,7 +1,5 @@
 import json
 import os
-import re
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -10,8 +8,65 @@ from pipeline import generate_daily_briefing
 
 load_dotenv()
 
-SITE_URL = os.getenv("SITE_URL", "https://dailypush.dpdns.org").rstrip("/")
+SITE_URL = "https://dailypush.dpdns.org"
 
+def push_to_wecom(report: dict) -> None:
+    """通过企业微信自建应用发送图文卡片到个人微信（支持静态 IP 代理）"""
+    corp_id = os.getenv("WECOM_CORP_ID")
+    agent_id = os.getenv("WECOM_AGENT_ID")
+    secret = os.getenv("WECOM_SECRET")
+    base_url = os.getenv("WECOM_BASE_URL", "https://qyapi.weixin.qq.com").rstrip("/")
+    proxy_url = os.getenv("WECOM_PROXY") or None  # 新增：读取代理地址
+
+    if not all([corp_id, agent_id, secret]):
+        raise RuntimeError("未完整配置 WECOM_CORP_ID / WECOM_AGENT_ID / WECOM_SECRET")
+
+    with httpx.Client(proxy=proxy_url, timeout=15.0) as client:
+        # 1. 获取 access_token
+        token_resp = client.get(
+            f"{base_url}/cgi-bin/gettoken",
+            params={"corpid": corp_id, "corpsecret": secret},
+        )
+        token_resp.raise_for_status()
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise RuntimeError(f"获取企业微信 access_token 失败: {token_data}")
+
+        # 2. 发送图文卡片消息
+        report_date = report.get("reportDate", "")
+        overview = report.get("overview", "今日前沿 AI 深度资讯已更新，点击阅读全文。")
+        count = len(report.get("articles", []))
+
+        payload = {
+            "touser": "@all",
+            "msgtype": "news",
+            "agentid": int(agent_id),
+            "news": {
+                "articles": [
+                    {
+                        "title": f"AI 每日简报 · {report_date}（精选 {count} 篇）",
+                        "description": overview,
+                        "url": f"{SITE_URL}/",
+                        "picurl": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80",
+                    }
+                ]
+            },
+        }
+
+        res = client.post(
+            f"{base_url}/cgi-bin/message/send",
+            params={"access_token": access_token},
+            json=payload,
+        ).json()
+
+    if res.get("errcode") == 0:
+        print("[企业微信推送成功] 图文卡片已送达个人微信")
+    else:
+        raise RuntimeError(f"企业微信推送失败: {res}")
+
+import re
+from concurrent.futures import ThreadPoolExecutor
 
 def _fetch_and_translate_one(article: dict) -> None:
     """抓取单篇文章正文并调用 DeepSeek 预翻译为中文 Markdown"""
@@ -47,12 +102,7 @@ def _fetch_and_translate_one(article: dict) -> None:
                 follow_redirects=True,
             )
             if r.status_code == 200:
-                html = re.sub(
-                    r"<(script|style|nav|header|footer|aside|noscript)[^>]*>[\s\S]*?</\1>",
-                    "",
-                    r.text,
-                    flags=re.I,
-                )
+                html = re.sub(r"<(script|style|nav|header|footer|aside|noscript)[^>]*>[\s\S]*?</\1>", "", r.text, flags=re.I)
                 raw_text = re.sub(r"<[^>]+>", "\n", html)
                 raw_text = re.sub(r"\n{3,}", "\n\n", raw_text).strip()
         except Exception as e:
@@ -92,7 +142,7 @@ def _fetch_and_translate_one(article: dict) -> None:
                             "1. 严格忠实原文，不遗漏关键数据、实验结论与技术细节，不擅自发挥。\n"
                             "2. 保留常见专业英文术语（如 LLM、Agent、Transformer、Benchmark、API、Fine-tuning 等）或采用业内通用译法。\n"
                             "3. 保持原有的段落与小标题结构，使用简洁的 Markdown（如 ## 标题、加粗、列表）输出，不要输出任何开场白或解释，也不要重复输出文章主标题。\n"
-                            "4. 请务必完整保留原文中的所有 Markdown 图片语法 ![图片说明](图片URL)，绝对不要删除或修改图片链接，只需将括号前的图片说明翻译为中文即可。\n"
+                            "4.请务必完整保留原文中的所有 Markdown 图片语法 ![图片说明](图片URL)，绝对不要删除或修改图片链接，只需将括号前的图片说明翻译为中文即可。\n"
                             "清洗要求（严格执行）：\n"
                             "1. 彻底删除所有与文章正文无关的内容，包括但不限于：网站导航栏、登录/注册提示、订阅邮件弹窗、Cookie 声明、广告推广、赞助商信息、社交媒体分享按钮、作者简介、评论区以及文末的“延伸阅读/相关推荐”链接列表。\n"
                             "2. 删除文章中无意义的跳转链接（如“点击查看更多”、“返回顶部”、“登录阅读全文”等）。\n"
@@ -120,7 +170,6 @@ def pretranslate_articles(report: dict) -> None:
         return
     with ThreadPoolExecutor(max_workers=3) as executor:
         list(executor.map(_fetch_and_translate_one, articles))
-
 
 def export_static_json(report: dict) -> None:
     """将简报按日期归档导出到前端静态目录（作为兜底备份）"""
@@ -176,81 +225,82 @@ def ingest_to_d1(report: dict) -> None:
 
 
 def fetch_target_users() -> list[dict]:
-    """从 D1 读取所有已扫码订阅 WxPusher 的用户"""
+    """从 D1 读取所有已绑定微信的用户；若为空则兜底使用环境变量中的个人 OpenID"""
     secret = os.getenv("INGEST_SECRET")
-    if not secret:
-        print("[警告] 未配置 INGEST_SECRET，无法拉取用户列表")
-        return []
+    users: list[dict] = []
 
-    try:
-        resp = httpx.get(
-            f"{SITE_URL}/api/users",
-            headers={"Authorization": f"Bearer {secret}"},
-            timeout=15.0,
-        )
-        if resp.status_code == 200:
-            return resp.json().get("users", [])
-        print(f"[警告] 拉取用户列表失败 ({resp.status_code}): {resp.text[:100]}")
-    except Exception as e:
-        print(f"[警告] 读取 D1 用户列表异常: {e}")
+    if secret:
+        try:
+            resp = httpx.get(
+                f"{SITE_URL}/api/users",
+                headers={"Authorization": f"Bearer {secret}"},
+                timeout=15.0,
+            )
+            if resp.status_code == 200:
+                users = resp.json().get("users", [])
+        except Exception as e:
+            print(f"[警告] 读取 D1 用户列表失败，将使用默认 OpenID: {e}")
 
-    return []
+    if not users:
+        default_openid = os.getenv("WECHAT_OPEN_ID")
+        if default_openid:
+            users = [{"uid": "default", "nickname": "管理员", "wechat_openid": default_openid}]
+
+    return users
 
 
-def push_to_wxpusher(report: dict) -> None:
-    """通过 WxPusher 逐人发送每日简报，每人点击直达专属 ?uid= 页面"""
-    app_token = os.getenv("WXPUSHER_APP_TOKEN", "").strip()
-    if not app_token:
-        raise RuntimeError("未配置 WXPUSHER_APP_TOKEN")
+def push_to_wechat(report: dict) -> None:
+    """通过微信测试号循环向所有订阅用户发送模板消息，点击直达专属个性化网页"""
+    app_id = os.getenv("WECHAT_APP_ID")
+    app_secret = os.getenv("WECHAT_APP_SECRET")
+    template_id = os.getenv("WECHAT_TEMPLATE_ID")
+
+    if not all([app_id, app_secret, template_id]):
+        raise RuntimeError("未完整配置 WECHAT_APP_ID / WECHAT_APP_SECRET / WECHAT_TEMPLATE_ID")
 
     users = fetch_target_users()
     if not users:
-        print("[WxPusher 推送跳过] D1 中暂无已扫码订阅的用户")
+        print("[微信推送跳过] 未找到任何可推送的用户 OpenID")
         return
 
-    report_date = report.get("reportDate", "")
-    overview = report.get("overview", "今日前沿 AI 深度资讯已更新，点击阅读全文。")
-    articles = report.get("articles", [])
-    top_lines = "\n".join([f"- **{a.get('title', '')}**" for a in articles[:5]])
-
-    base_md = (
-        f"### 📅 AI 每日简报（{report_date}）\n\n"
-        f"> {overview}\n\n"
-        f"**今日精选（共 {len(articles)} 篇）：**\n"
-        f"{top_lines}\n"
+    # 1. 获取全局 access_token（一次获取，循环复用）
+    token_url = (
+        f"https://api.weixin.qq.com/cgi-bin/token"
+        f"?grant_type=client_credential&appid={app_id}&secret={app_secret}"
     )
+    token_resp = httpx.get(token_url, timeout=15.0)
+    token_resp.raise_for_status()
+    access_token = token_resp.json().get("access_token")
+    if not access_token:
+        raise RuntimeError(f"获取微信 access_token 失败: {token_resp.json()}")
 
+    # 2. 逐个用户发送带专属 ?uid= 的模板消息
+    send_url = (
+        f"https://api.weixin.qq.com/cgi-bin/message/template/send"
+        f"?access_token={access_token}"
+    )
     success_count = 0
     for user in users:
-        uid = user.get("uid", "default")
-        wx_uid = user.get("wechat_openid", "")
-        if not wx_uid:
-            continue
-
-        personal_url = f"{SITE_URL}/?uid={uid}"
+        uid = user["uid"]
+        open_id = user["wechat_openid"]
         payload = {
-            "appToken": app_token,
-            "content": f"{base_md}\n👉 [点击查看你的专属完整简报]({personal_url})",
-            "summary": f"AI 每日简报 ({report_date})：{overview[:36]}...",
-            "contentType": 3,  # 3 = Markdown
-            "uids": [wx_uid],
-            "url": personal_url,
+            "touser": open_id,
+            "template_id": template_id,
+            "url": f"{SITE_URL}/?uid={uid}",
+            "data": {
+                "date": {"value": str(report.get("reportDate", ""))},
+                "overview": {"value": str(report.get("overview", "今日 AI 简报已更新"))},
+                "count": {"value": str(len(report.get("articles", [])))},
+            },
         }
-        try:
-            res = httpx.post(
-                "https://wxpusher.zjiecode.com/api/send/message",
-                json=payload,
-                timeout=15.0,
-            ).json()
-            if res.get("success"):
-                success_count += 1
-                print(f"[WxPusher 推送成功] uid={uid}")
-            else:
-                print(f"[WxPusher 推送失败] uid={uid}: {res.get('msg')}")
-        except Exception as e:
-            print(f"[WxPusher 推送异常] uid={uid}: {e}")
+        res = httpx.post(send_url, json=payload, timeout=15.0).json()
+        if res.get("errcode") == 0:
+            success_count += 1
+            print(f"[推送成功] uid={uid} ({user.get('nickname') or ''})")
+        else:
+            print(f"[推送失败] uid={uid}: {res}")
 
-    print(f"[WxPusher 推送完成] 共成功推送 {success_count}/{len(users)} 位用户")
+    print(f"[微信推送完成] 共成功推送 {success_count}/{len(users)} 位用户")
 
 
 if __name__ == "__main__":
@@ -263,11 +313,11 @@ if __name__ == "__main__":
     print("[3/5] 正在导出静态 JSON 备份...")
     export_static_json(report)
 
-    print("[4/5] 正在写入 Cloudflare D1 公共文Ks章池...")
+    print("[4/5] 正在写入 Cloudflare D1 公共文章池...")
     ingest_to_d1(report)
 
-    print("[5/5] 正在通过 WxPusher 推送个性化简报...")
+    print("[5/5] 正在推送企业微信图文卡片...")
     try:
-        push_to_wxpusher(report)
+        push_to_wecom(report)
     except Exception as e:
-        print(f"[WxPusher 推送失败] {e}")
+        print(f"[企业微信推送失败] {e}")
