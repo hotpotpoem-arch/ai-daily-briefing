@@ -7,6 +7,7 @@ import { ArticleItem, FeedbackAction } from '@/types/briefing';
 interface ArticleCardProps {
   article: ArticleItem;
   onFeedbackSubmit: (articleId: string, action: FeedbackAction) => Promise<void>;
+  matchedPref?: boolean;
 }
 
 /** 轻量级 Markdown 转 HTML（带排版样式，零依赖） */
@@ -119,12 +120,18 @@ export function ArticleCard({ article, onFeedbackSubmit }: ArticleCardProps) {
           {/* 顶部：来源与 AI 评分 */}
           <div className="mb-2.5 flex items-center justify-between text-xs text-slate-500">
             <span className="font-medium text-slate-600">{article.sourceName}</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
-              <Sparkles className="h-3 w-3" />
-              AI 评分 {article.score.toFixed(1)}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {article.matchedPref && (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                  ✨ 专属推荐
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                <Sparkles className="h-3 w-3" />
+                AI 评分 {article.score.toFixed(1)}
+              </span>
+            </div>
           </div>
-
           {/* 标题 */}
           <a
             href={article.url}

@@ -11,6 +11,7 @@ export interface ArticleItem {
   score: number; // AI 初筛评分 (1-5)
   userFeedback?: FeedbackAction;
   contentZh?: string;
+  matchedPref?: boolean;
 }
 
 export interface DailyReport {

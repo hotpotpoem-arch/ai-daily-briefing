@@ -65,6 +65,10 @@ const MOCK_REPORT: DailyReport = {
 
 export default function DailyBriefingPage() {
   const [uid, setUid] = useState<string>('default');
+  const [userPrefText, setUserPrefText] = useState('');
+  const [prefInput, setPrefInput] = useState('');
+  const [showPrefModal, setShowPrefModal] = useState(false);
+  const [isSavingPref, setIsSavingPref] = useState(false);
   const [staticArchive, setStaticArchive] = useState<Record<string, DailyReport>>({});
   const [report, setReport] = useState<DailyReport | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('全部');
@@ -107,6 +111,17 @@ export default function DailyBriefingPage() {
             setAvailableDates(data.dates);
             setReport(data.report);
             setIsUsingMock(false);
+            setAvailableDates(data.dates);
+            setReport(data.report);
+            setIsUsingMock(false);
+
+            // 读取云端保存的自定义偏好；若未填过且未点击过「暂不设置」，自动弹出一次
+            const serverPref = (data.userPrefText || '').trim();
+            setUserPrefText(serverPref);
+            setPrefInput(serverPref);
+            if (!serverPref && !localStorage.getItem('briefing_pref_skipped')) {
+              setShowPrefModal(true);
+            }
             if (isManualRefresh) {
               showToast('已同步最新云端个性化简报', 'success');
             }
@@ -230,6 +245,35 @@ export default function DailyBriefingPage() {
     }
   };
 
+  const handleSavePref = async () => {
+    setIsSavingPref(true);
+    try {
+      const res = await fetch('/api/prefs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, prefText: prefInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || '保存失败');
+
+      setUserPrefText(prefInput.trim());
+      setShowPrefModal(false);
+      localStorage.setItem('briefing_pref_skipped', '1');
+      showToast('偏好已保存，正在为你重新排序...', 'success');
+      await fetchBriefing(uid, report?.reportDate);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '网络异常';
+      showToast(`偏好保存失败：${msg}`, 'error');
+    } finally {
+      setIsSavingPref(false);
+    }
+  };
+
+  const handleSkipPref = () => {
+    localStorage.setItem('briefing_pref_skipped', '1');
+    setShowPrefModal(false);
+  };
+
   // 提取分类及对应数量
   const categoryStats = useMemo(() => {
     if (!report) return [];
@@ -275,6 +319,43 @@ export default function DailyBriefingPage() {
             {toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : '✨'}
           </span>
           <span className="text-sm font-medium">{toast.message}</span>
+        </div>
+      )}
+      
+      {/* 个性化偏好设置弹窗 */}
+      {showPrefModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-[#FAF9F6] border border-stone-200 shadow-xl p-6">
+            <h3 className="text-lg font-semibold text-stone-900">定制你的 AI 简报偏好</h3>
+            <p className="mt-1.5 text-sm text-stone-500">
+              用一句话描述你关注的方向、公司或不想看的内容，AI 会自动为你置顶相关资讯（仍会保留行业重磅新闻）。
+            </p>
+            <textarea
+              value={prefInput}
+              onChange={(e) => setPrefInput(e.target.value)}
+              rows={4}
+              placeholder="例如：关注英伟达芯片、具身智能和开源工具，少看纯融资和 AI 伦理争议"
+              className="mt-4 w-full rounded-xl border border-stone-300 bg-white p-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:outline-none"
+            />
+            <div className="mt-4 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={handleSkipPref}
+                disabled={isSavingPref}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-200/60 transition-colors"
+              >
+                暂不设置
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePref}
+                disabled={isSavingPref}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-50 transition-colors"
+              >
+                {isSavingPref ? 'AI 正在解析偏好...' : '保存并重排'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -341,6 +422,16 @@ export default function DailyBriefingPage() {
                 {isRefreshing ? '同步中...' : '刷新简报'}
               </span>
             </button>
+            <button
+        type="button"
+        onClick={() => {
+          setPrefInput(userPrefText);
+          setShowPrefModal(true);
+        }}
+        className="px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors"
+      >
+        ⚙️ 偏好
+      </button>
           </div>
         </div>
       </header>
