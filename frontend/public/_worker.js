@@ -46,6 +46,13 @@ function isBlockedContent(text) {
   return patterns.some((re) => re.test(sample));
 }
 
+// 按段落换行符安全截断长文，避免切在半句话中间
+function safeSlice(text, maxLen = 24000) {
+  if (!text || text.length <= maxLen) return text || '';
+  const cut = text.lastIndexOf('\n', maxLen);
+  return text.slice(0, cut > maxLen * 0.5 ? cut : maxLen);
+}
+
 /**
  * 根据用户偏好关键词，实时抓取 Hacker News & GDELT 资讯并由 DeepSeek 质检打分与翻译
  */
@@ -65,7 +72,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
   try {
     const sinceTs = Math.floor(Date.now() / 1000) - 14 * 86400;
     const hnUrl = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(enKw)}&tags=story&numericFilters=created_at_i>${sinceTs}&hitsPerPage=8`;
-    const hnRes = await fetch(hnUrl);
+    const hnRes = await fetch(hnUrl, { signal: AbortSignal.timeout(8000) });
     if (hnRes.ok) {
       const hnData = await hnRes.json();
       const hits = hnData.hits || [];
@@ -92,7 +99,7 @@ async function fetchPersonalizedNews(likeKws, prefText, env) {
   // 2. 数据源 B：GDELT 2.0 全球新闻开放 API（补充主流媒体报道）
   try {
     const gdeltUrl = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(enKw)}&mode=artlist&maxrecords=8&format=json&sort=datedesc`;
-    const gdRes = await fetch(gdeltUrl);
+    const gdRes = await fetch(gdeltUrl, { signal: AbortSignal.timeout(8000) });
     if (gdRes.ok) {
       const gdData = await gdRes.json();
       const arts = gdData.articles || [];
@@ -188,7 +195,7 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
   if (!artId || !targetUrl || isBlockedUrl(targetUrl)) return;
   let rawText = '';
 
-  // 1. 优先通过 Jina Reader 提取纯净 Markdown 正文
+  // 1. 优先通过 Jina Reader 提取纯净 Markdown 正文（10 秒超时）
   try {
     const headers = {
       'Accept': 'text/plain',
@@ -199,22 +206,27 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
     if (env.JINA_API_KEY) {
       headers['Authorization'] = `Bearer ${env.JINA_API_KEY}`;
     }
-    const r = await fetch(`https://r.jina.ai/${targetUrl}`, { headers });
+    const r = await fetch(`https://r.jina.ai/${targetUrl}`, {
+      headers,
+      signal: AbortSignal.timeout(10000),
+    });
     if (r.ok) {
       const txt = (await r.text()).trim();
       if (!isBlockedContent(txt)) rawText = txt;
     }
   } catch {}
 
-  // 2. 兜底：直接抓取原文并清除无关标签
+  // 2. 兜底：直接抓取原文并清除无关标签（8 秒超时 + 截断超大 HTML）
   if (!rawText) {
     try {
       const r = await fetch(targetUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         redirect: 'follow',
+        signal: AbortSignal.timeout(8000),
       });
       if (r.ok) {
         const html = (await r.text())
+          .slice(0, 250000)
           .replace(/<(script|style|nav|header|footer|aside|noscript)[^>]*>[\s\S]*?<\/\1>/gi, '');
         rawText = html.replace(/<[^>]+>/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
       }
@@ -229,9 +241,9 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
   let contentZh = '';
 
   if (enChars <= cnChars * 2) {
-    contentZh = rawText.slice(0, 15000);
+    contentZh = safeSlice(rawText, 24000);
   } else if (env.LLM_API_KEY) {
-    // 3. 调用 DeepSeek 清洗并翻译为中文 Markdown
+    // 3. 调用 DeepSeek 清洗并翻译为中文 Markdown（放宽至 24000 字符 + max_tokens: 8192）
     const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
     try {
       const llmRes = await fetch(`${baseUrl}/chat/completions`, {
@@ -243,13 +255,14 @@ async function pretranslateSingleArticle(artId, targetUrl, env) {
         body: JSON.stringify({
           model: env.LLM_MODEL || 'deepseek-chat',
           temperature: 0.2,
+          max_tokens: 8192,
           messages: [
             {
               role: 'system',
               content:
                 '你是一位精通人工智能与科技新闻的专业中英译者。请将文章正文准确、流畅地翻译为简体中文 Markdown，严格保留原文数据、结论、小标题结构与正文配图 ![说明](URL)；彻底删除导航栏、登录注册、广告、Cookie 声明、评论区及延伸阅读链接，不要输出开场白或重复主标题。',
             },
-            { role: 'user', content: rawText.slice(0, 12000) },
+            { role: 'user', content: safeSlice(rawText, 24000) },
           ],
         }),
       });
@@ -284,7 +297,6 @@ export default {
       }
 
       try {
-        // 1. 读取手动填写的文本偏好与关键词
         const { results: prefRows } = await env.DB.prepare(
           'SELECT pref_text, like_keywords, dislike_keywords FROM user_prefs'
         ).all();
@@ -301,7 +313,6 @@ export default {
           } catch {}
         }
 
-        // 2. 统计点击「感兴趣 / 不感兴趣」累积的标签权重
         const { results: fbRows } = await env.DB.prepare(
           'SELECT category, tags, action FROM user_feedback'
         ).all();
@@ -418,7 +429,7 @@ export default {
             JSON.stringify(dislikeKeywords)
           ).run();
 
-          // 实时全网搜索并质检专属高质量资讯，写入当天简报并在后台并发预翻译
+          // 实时全网搜索并质检专属高质量资讯，写入当天简报并在后台顺序预翻译
           let addedCount = 0;
           let fetchDebug = null;
           if (likeKeywords.length > 0) {
@@ -461,12 +472,16 @@ export default {
                 addedCount++;
               }
 
-              // 接口先秒返回，后台异步并发预翻译所有新增专属资讯并回写 D1
+              // 接口先秒返回，后台按顺序预翻译避免触发 Jina 限流或 Worker CPU 超限
               if (insertedTasks.length > 0 && ctx?.waitUntil) {
                 ctx.waitUntil(
-                  Promise.allSettled(
-                    insertedTasks.map((t) => pretranslateSingleArticle(t.id, t.url, env))
-                  )
+                  (async () => {
+                    for (const t of insertedTasks) {
+                      try {
+                        await pretranslateSingleArticle(t.id, t.url, env);
+                      } catch {}
+                    }
+                  })()
                 );
               }
             }
@@ -489,7 +504,6 @@ export default {
 
         if (!articleId) return jsonResp({ error: '缺少 articleId' }, 400);
 
-        // 自动确保用户存在于 users 表
         await env.DB.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').bind(uid).run();
 
         if (!action) {
@@ -529,9 +543,10 @@ export default {
         const res = await fetch(imgUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': '', // 清除 Referer，绕过部分外网防盗链
+            'Referer': '',
           },
           cf: { cacheTtl: 86400, cacheEverything: true },
+          signal: AbortSignal.timeout(8000),
         });
         const headers = new Headers(res.headers);
         headers.set('Cache-Control', 'public, max-age=86400');
@@ -548,7 +563,6 @@ export default {
         const uid = (url.searchParams.get('uid') || 'default').trim();
         const reqDate = url.searchParams.get('date');
 
-        // 查询所有可用日期
         const { results: dateRows } = await env.DB.prepare(
           'SELECT DISTINCT report_date FROM articles ORDER BY report_date DESC LIMIT 30'
         ).all();
@@ -560,12 +574,10 @@ export default {
 
         const targetDate = reqDate && dates.includes(reqDate) ? reqDate : dates[0];
 
-        // 查询当天公共文章池 + 当前用户的专属搜索文章
         const { results: articleRows } = await env.DB.prepare(
           `SELECT * FROM articles WHERE report_date = ? AND (target_uid IS NULL OR target_uid = 'all' OR target_uid = ?) ORDER BY score DESC`
         ).bind(targetDate, uid).all();
 
-        // 查询该用户的自定义文本偏好
         const prefRow = await env.DB.prepare(
           'SELECT pref_text, like_keywords, dislike_keywords FROM user_prefs WHERE uid = ?'
         ).bind(uid).first();
@@ -573,7 +585,6 @@ export default {
         const likeKws = JSON.parse(prefRow?.like_keywords || '[]').map((k) => k.toLowerCase());
         const dislikeKws = JSON.parse(prefRow?.dislike_keywords || '[]').map((k) => k.toLowerCase());
 
-        // 查询该用户的全部历史偏好，计算标签与分类权重
         const { results: fbRows } = await env.DB.prepare(
           'SELECT article_id, category, tags, action FROM user_feedback WHERE uid = ?'
         ).bind(uid).all();
@@ -598,7 +609,6 @@ export default {
           } catch {}
         }
 
-        // 结合基础 AI 评分 + 个人偏好权重进行重排
         const articles = articleRows.map((row) => {
           let tags = [];
           try { tags = JSON.parse(row.tags || '[]'); } catch {}
@@ -617,7 +627,6 @@ export default {
 
           const matchKw = (text, kw) => {
             if (!kw) return false;
-            // 纯英文短词按完整单词匹配，避免 "ai" 误命中 "daily"、"main"
             if (/^[a-z0-9]+$/i.test(kw) && kw.length <= 4) {
               return new RegExp(`\\b${kw}\\b`, 'i').test(text);
             }
@@ -654,7 +663,6 @@ export default {
           };
         });
 
-        // 只要不是被用户明确屏蔽的普通文章，全部保留展示；专属文章置顶
         const finalArticles = articles
           .filter((a) => !(a.matchedDislike && a.score < 4.7))
           .sort((a, b) => b._rankScore - a._rankScore);
@@ -690,7 +698,6 @@ export default {
           return jsonResp({ error: '参数不完整' }, 400);
         }
 
-        // 覆盖当天旧数据
         await env.DB.prepare('DELETE FROM articles WHERE report_date = ?').bind(reportDate).run();
 
         const stmts = articles.map((art) =>
@@ -778,7 +785,7 @@ export default {
       }
     }
 
-    // 7. AI 精准翻译接口（供纯享页异步调用，并顺手回写有效 D1 缓存）
+    // 7. AI 精准翻译接口（放宽至 24000 字符 + max_tokens: 8192，并回写有效 D1 缓存）
     if (url.pathname === '/api/translate' && request.method === 'POST') {
       try {
         if (!env.LLM_API_KEY) {
@@ -805,6 +812,7 @@ export default {
           body: JSON.stringify({
             model,
             temperature: 0.2,
+            max_tokens: 8192,
             messages: [
               {
                 role: 'system',
@@ -812,7 +820,7 @@ export default {
               },
               {
                 role: 'user',
-                content: text.slice(0, 12000),
+                content: safeSlice(text, 24000),
               },
             ],
           }),
@@ -957,7 +965,7 @@ export default {
       }
 
       try {
-        // 1. 优先尝试通过 Jina Reader 提取正文（有 Key 自动携带，无 Key 走免费额度）
+        // 1. 优先尝试通过 Jina Reader 提取正文（10 秒超时）
         try {
           const jinaHeaders = {
             'Accept': 'text/plain',
@@ -968,7 +976,10 @@ export default {
           if (env.JINA_API_KEY) {
             jinaHeaders['Authorization'] = `Bearer ${env.JINA_API_KEY}`;
           }
-          const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, { headers: jinaHeaders });
+          const jinaRes = await fetch(`https://r.jina.ai/${targetUrl}`, {
+            headers: jinaHeaders,
+            signal: AbortSignal.timeout(10000),
+          });
           if (jinaRes.ok) {
             const rawMd = await jinaRes.text();
             if (!isBlockedContent(rawMd)) {
@@ -994,7 +1005,7 @@ export default {
           }
         } catch {}
 
-        // 2. 兜底：直连抓取原文并清洗标签
+        // 2. 兜底：直连抓取原文并清洗标签（8 秒超时 + 截断超大 HTML 防 CPU 超限）
         if (!articleHtml) {
           const res = await fetch(targetUrl, {
             headers: {
@@ -1002,10 +1013,11 @@ export default {
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             },
             redirect: 'follow',
+            signal: AbortSignal.timeout(8000),
           });
 
           if (!res.ok) throw new Error(`原文抓取失败 (${res.status})`);
-          const rawHtml = await res.text();
+          const rawHtml = (await res.text()).slice(0, 250000);
 
           const titleMatch = rawHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
           if (titleMatch) title = titleMatch[1].replace(/\s+/g, ' ').trim();
@@ -1033,7 +1045,7 @@ export default {
         if (isBlockedContent(plainCheck)) {
           return new Response(
             `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>需访问原文 - 纯享阅读</title></head><body style="font-family:-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:20px;line-height:1.7;color:#1f2937;"><a href="javascript:history.back()" style="color:#2563eb;text-decoration:none;">← 返回简报</a><div style="margin-top:24px;padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;"><h3 style="margin:0 0 8px;">该网站开启了付费墙或人机验证</h3><p style="margin:0 0 16px;font-size:14px;color:#6b7280;">纯享模式无法自动提取正文内容，建议直接前往原网页阅读。</p><a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">前往原网页阅读 ↗</a></div></body></html>`,
-            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
           );
         }
 
@@ -1312,9 +1324,10 @@ export default {
           },
         });
       } catch (err) {
+        // 返回 200 状态码，防止 Cloudflare 代理劫持为默认 502 Bad Gateway 页面
         return new Response(
-          `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>纯享解析失败</title></head><body style="font-family:-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:20px;line-height:1.7;color:#1f2937;"><a href="javascript:history.back()" style="color:#2563eb;text-decoration:none;">← 返回简报</a><div style="margin-top:24px;padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;"><h3 style="margin:0 0 8px;">纯享解析失败</h3><p style="margin:0 0 16px;font-size:14px;color:#6b7280;">${escapeHtml(err.message)}</p><a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">前往原网页阅读 ↗</a></div></body></html>`,
-          { status: 502, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>纯享模式暂不支持该网页</title></head><body style="font-family:-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:20px;line-height:1.7;color:#1f2937;"><a href="javascript:history.back()" style="color:#2563eb;text-decoration:none;">← 返回简报</a><div style="margin-top:24px;padding:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;"><h3 style="margin:0 0 8px;">纯享模式暂不支持该网页</h3><p style="margin:0 0 16px;font-size:14px;color:#6b7280;">原因：${escapeHtml(err.message)}。建议直接前往原网页阅读。</p><a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">前往原网页阅读 ↗</a></div></body></html>`,
+          { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
       }
     }
