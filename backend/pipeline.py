@@ -95,11 +95,38 @@ def build_preference_prompt() -> str:
 
     return "\n".join(lines)
 
+def load_recent_history(url_days: int = 7, title_days: int = 3) -> tuple[set[str], list[str]]:
+    """从 briefings.json 读取近期已推送的 URL 和标题，用于跨天去重"""
+    archive_path = Path(__file__).resolve().parent.parent / "frontend" / "public" / "data" / "briefings.json"
+    if not archive_path.exists():
+        return set(), []
 
-def fetch_raw_articles() -> list[dict]:
+    try:
+        archive = json.loads(archive_path.read_text(encoding="utf-8"))
+    except Exception:
+        return set(), []
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    # 排除今天，按日期从新到旧排序
+    past_dates = sorted([d for d in archive.keys() if d != today_str], reverse=True)
+
+    history_urls: set[str] = set()
+    recent_titles: list[str] = []
+
+    for idx, date_str in enumerate(past_dates[:url_days]):
+        articles = archive.get(date_str, {}).get("articles", [])
+        for art in articles:
+            if art.get("url"):
+                history_urls.add(art["url"].strip())
+            if idx < title_days and art.get("title"):
+                recent_titles.append(f"[{date_str}] {art['title']}")
+
+    return history_urls, recent_titles
+
+def fetch_raw_articles(history_urls: set[str] | None = None) -> list[dict]:
     """从前沿 AI 官方博客与头部科技媒体抓取深度图文资讯"""
     items: list[dict] = []
-    seen_urls: set[str] = set()
+    seen_urls: set[str] = set(history_urls or set())
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -143,7 +170,9 @@ def fetch_raw_articles() -> list[dict]:
 def generate_daily_briefing() -> dict:
     """执行抓取 -> DeepSeek 筛选总结 -> 输出标准 DailyReport 结构"""
     start_time = time.time()
-    raw_items = fetch_raw_articles()
+    history_urls, recent_titles = load_recent_history(url_days=7, title_days=3)
+    print(f"[去重] 已加载近 7 天历史链接 {len(history_urls)} 条，近 3 天标题 {len(recent_titles)} 条")
+    raw_items = fetch_raw_articles(history_urls)
 
     if not raw_items:
         raise RuntimeError("所有数据源均抓取失败，请检查网络连接。")
@@ -180,6 +209,13 @@ def generate_daily_briefing() -> dict:
 }"""
 
     pref_prompt = build_preference_prompt()
+    if recent_titles:
+        titles_str = "\n".join(f"- {t}" for t in recent_titles)
+        system_prompt += (
+            "\n\n【近 3 天已推送过的资讯（跨天去重，严格执行）】\n"
+            f"{titles_str}\n"
+            "注意：以上事件近几天已经推送过，除非今天有重大新进展或全新深度评测，否则即使换了媒体报道也请直接过滤，不要重复推送。"
+        )
     if pref_prompt:
         system_prompt += pref_prompt
         print("[个性化] 已注入用户历史偏好到 DeepSeek 提示词")
