@@ -70,11 +70,8 @@ export default function DailyBriefingPage() {
   const [showPrefModal, setShowPrefModal] = useState(false);
   const [isSavingPref, setIsSavingPref] = useState(false);
 
-  // WxPusher 微信订阅弹窗状态
+  // 企业微信插件订阅弹窗状态
   const [showSubModal, setShowSubModal] = useState(false);
-  const [qrUrl, setQrUrl] = useState('');
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrError, setQrError] = useState('');
 
   const [staticArchive, setStaticArchive] = useState<Record<string, DailyReport>>({});
   const [report, setReport] = useState<DailyReport | null>(null);
@@ -190,26 +187,6 @@ export default function DailyBriefingPage() {
     };
     init();
   }, [fetchBriefing]);
-
-  const handleOpenSubscribe = async (forceRefresh = false) => {
-    setShowSubModal(true);
-    if (qrUrl && !forceRefresh) return;
-
-    setQrLoading(true);
-    setQrError('');
-    try {
-      const res = await fetch(`/api/wxpusher/qrcode?uid=${encodeURIComponent(uid)}`);
-      const data = await res.json();
-      if (!res.ok || !data.qrUrl) {
-        throw new Error(data.error || '生成二维码失败');
-      }
-      setQrUrl(data.qrUrl);
-    } catch (err) {
-      setQrError(err instanceof Error ? err.message : '网络异常，请稍后重试');
-    } finally {
-      setQrLoading(false);
-    }
-  };
 
   const handleDateChange = async (date: string) => {
     setSelectedCategory('全部');
@@ -388,7 +365,7 @@ export default function DailyBriefingPage() {
         </div>
       )}
 
-      {/* WxPusher 微信订阅二维码弹窗 */}
+      {/* 企业微信插件订阅二维码弹窗 */}
       {showSubModal && (
         <div
           onClick={() => setShowSubModal(false)}
@@ -402,33 +379,20 @@ export default function DailyBriefingPage() {
               微信扫码订阅每日简报
             </h3>
             <p className="mt-1.5 text-xs text-stone-500 leading-relaxed">
-              微信扫描下方二维码并关注，每天早上自动推送你的专属 AI 简报
+              打开微信扫一扫关注，每天早上直接在微信聊天列表接收简报（无需下载 App）
             </p>
 
-            <div className="mt-4 mb-5 mx-auto w-52 h-52 rounded-xl bg-white border border-stone-200 flex items-center justify-center overflow-hidden p-2">
-              {qrLoading && (
-                <span className="text-xs text-stone-500">正在生成专属二维码...</span>
-              )}
-              {!qrLoading && qrError && (
-                <div className="px-3 space-y-2">
-                  <p className="text-xs text-rose-600">{qrError}</p>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSubscribe(true)}
-                    className="px-3 py-1 rounded-lg border border-stone-300 bg-white text-xs text-stone-700 hover:bg-stone-50 cursor-pointer"
-                  >
-                    重新获取
-                  </button>
-                </div>
-              )}
-              {!qrLoading && !qrError && qrUrl && (
-                <img
-                  src={qrUrl}
-                  alt="微信订阅二维码"
-                  className="w-full h-full object-contain"
-                />
-              )}
+            <div className="mt-4 mb-3 mx-auto w-52 h-52 rounded-xl bg-white border border-stone-200 flex items-center justify-center overflow-hidden p-2">
+              <img
+                src="/wecom-qr.png"
+                alt="微信扫码订阅每日简报"
+                className="w-full h-full object-contain"
+              />
             </div>
+
+            <p className="mb-4 text-[11px] text-stone-400">
+              扫码关注微信插件即可自动接收每日推送
+            </p>
 
             <button
               type="button"
@@ -493,7 +457,7 @@ export default function DailyBriefingPage() {
             {/* 微信订阅按钮 */}
             <button
               type="button"
-              onClick={() => handleOpenSubscribe()}
+              onClick={() => setShowSubModal(true)}
               title="微信订阅每日简报"
               className="inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-2 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium text-emerald-700 hover:bg-emerald-100 active:scale-[0.98] transition-all cursor-pointer"
             >
