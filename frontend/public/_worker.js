@@ -54,6 +54,92 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
+
+    // 0. 读取/保存用户自定义文本偏好（保存时自动用 DeepSeek 提取中英文关键词）
+    if (url.pathname === '/api/prefs') {
+      const uid = (url.searchParams.get('uid') || 'default').trim();
+
+      if (request.method === 'GET') {
+        try {
+          const row = await env.DB.prepare(
+            'SELECT pref_text, like_keywords, dislike_keywords FROM user_prefs WHERE uid = ?'
+          ).bind(uid).first();
+          return jsonResp({
+            uid,
+            prefText: row?.pref_text || '',
+            likeKeywords: JSON.parse(row?.like_keywords || '[]'),
+            dislikeKeywords: JSON.parse(row?.dislike_keywords || '[]'),
+          });
+        } catch (err) {
+          return jsonResp({ error: err.message }, 500);
+        }
+      }
+
+      if (request.method === 'POST') {
+        try {
+          const body = await request.json();
+          const targetUid = (body.uid || uid || 'default').trim();
+          const prefText = (body.prefText || '').trim();
+
+          let likeKeywords = [];
+          let dislikeKeywords = [];
+
+          // 调用 DeepSeek 将自然语言偏好解析为中英文匹配词
+          if (prefText && env.LLM_API_KEY) {
+            const baseUrl = (env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+            const model = env.LLM_MODEL || 'deepseek-chat';
+            try {
+              const llmRes = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${env.LLM_API_KEY}`,
+                },
+                body: JSON.stringify({
+                  model,
+                  temperature: 0.1,
+                  response_format: { type: 'json_object' },
+                  messages: [
+                    {
+                      role: 'system',
+                      content: '将用户的阅读偏好描述拆解为中英文关键词数组，方便做文章标题和摘要的文本匹配。严格输出 JSON：{"like": ["词1", "word1"], "dislike": ["词2", "word2"]}。每个词尽量简短精准，同时包含常见中英文写法（如 "英伟达" 和 "Nvidia"）。',
+                    },
+                    { role: 'user', content: prefText },
+                  ],
+                }),
+              });
+              if (llmRes.ok) {
+                const data = await llmRes.json();
+                const parsed = JSON.parse(data?.choices?.[0]?.message?.content || '{}');
+                if (Array.isArray(parsed.like)) likeKeywords = parsed.like;
+                if (Array.isArray(parsed.dislike)) dislikeKeywords = parsed.dislike;
+              }
+            } catch {}
+          }
+
+          await env.DB.prepare('INSERT OR IGNORE INTO users (uid) VALUES (?)').bind(targetUid).run();
+          await env.DB.prepare(
+            `INSERT INTO user_prefs (uid, pref_text, like_keywords, dislike_keywords, updated_at)
+             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(uid) DO UPDATE SET
+               pref_text = excluded.pref_text,
+               like_keywords = excluded.like_keywords,
+               dislike_keywords = excluded.dislike_keywords,
+               updated_at = CURRENT_TIMESTAMP`
+          ).bind(
+            targetUid,
+            prefText,
+            JSON.stringify(likeKeywords),
+            JSON.stringify(dislikeKeywords)
+          ).run();
+
+          return jsonResp({ ok: true, uid: targetUid, prefText, likeKeywords, dislikeKeywords });
+        } catch (err) {
+          return jsonResp({ error: err.message }, 500);
+        }
+      }
+    }
+
     // 1. 记录/取消用户偏好反馈（按 uid 隔离）
     if (url.pathname === '/api/feedback' && request.method === 'POST') {
       try {
@@ -141,6 +227,14 @@ export default {
         ).bind(targetDate).all();
 
         // 查询该用户的全部历史偏好，计算标签与分类权重
+        // 查询该用户的自定义文本偏好
+        const prefRow = await env.DB.prepare(
+          'SELECT pref_text, like_keywords, dislike_keywords FROM user_prefs WHERE uid = ?'
+        ).bind(uid).first();
+        const userPrefText = prefRow?.pref_text || '';
+        const likeKws = JSON.parse(prefRow?.like_keywords || '[]').map((k) => k.toLowerCase());
+        const dislikeKws = JSON.parse(prefRow?.dislike_keywords || '[]').map((k) => k.toLowerCase());
+        
         const { results: fbRows } = await env.DB.prepare(
           'SELECT article_id, category, tags, action FROM user_feedback WHERE uid = ?'
         ).bind(uid).all();
@@ -174,9 +268,24 @@ export default {
           for (const t of tags) {
             boost += tagWeights[t] || 0;
           }
+          // ↓ 插入在第 271 行这里：计算自定义文本偏好的加分/减分
+          const searchText = `${row.title || ''} ${row.tldr || ''} ${tags.join(' ')}`.toLowerCase();
+          let matchedPref = false;
+          for (const kw of likeKws) {
+            if (kw && searchText.includes(kw)) {
+              boost += 1.2;
+              matchedPref = true;
+            }
+          }
+          for (const kw of dislikeKws) {
+            if (kw && searchText.includes(kw)) {
+              boost -= 1.0;
+            }
+          }
 
           return {
             id: row.id,
+            matchedPref,
             category: row.category,
             title: row.title,
             tldr: row.tldr,
@@ -195,6 +304,7 @@ export default {
 
         return jsonResp({
           dates,
+          userPrefText,
           report: {
             reportDate: targetDate,
             overview: articleRows[0]?.overview || '今日 AI 简报已生成。',
