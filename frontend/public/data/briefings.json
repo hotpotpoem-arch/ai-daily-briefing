@@ -1,4 +1,235 @@
 {
+  "2026-11-26": {
+    "reportDate": "2026-11-26",
+    "overview": "今日核心动态集中在Google DeepMind发布Gemini 4 Carbon及AlphaProof Code，后者以三百万行Lean证明验证Signal加密核心，标志AI形式化验证迈入实用阶段。同时，OpenAI合并Chat与Work并调整用量限制，Anthropic CEO Dario Amodei公开回应外界质疑，AI安全与治理争议持续升温。",
+    "stats": {
+      "scannedCount": 36,
+      "selectedCount": 13,
+      "durationSeconds": 12
+    },
+    "articles": [
+      {
+        "id": "ds_1126_001",
+        "category": "前沿发布",
+        "title": "DeepMind发布AlphaProof Code：AI智能体生成三百万行Lean证明，验证Signal加密核心",
+        "tldr": "AlphaProof Code智能体为Signal核心加密编写300万行Lean形式化证明，实现复杂软件深度验证突破，有望重塑安全关键系统的可信验证流程。",
+        "tags": [
+          "形式化验证",
+          "AI智能体",
+          "密码安全",
+          "Lean"
+        ],
+        "url": "https://deepmind.google/blog/introducing-alphaproof-code/",
+        "sourceName": "Google DeepMind",
+        "score": 4.9,
+        "userFeedback": null,
+        "contentZh": "2026年11月10日 研究\n\n# 推出 AlphaProof Code：深度验证复杂软件的重大突破\n\nPushmeet Kohli 与 Swarat Chaudhuri\n\n[阅读技术论文](https://deepmind.google/documents/36/Formal_Verification_of_Signal_4.pdf)\n\n![图片 1：抽象 3D 数字艺术，一个球体旁边是一系列对角线排列的平行半透明玻璃板，纹理和颜色各异，象征分层软件验证。](https://lh3.googleusercontent.com/PHIZgiGejgu8shHsJV9pVfWv7Kr5rTj-e2yIj73c8LkDKBnTTAr2r28DN9aZd1vLDjCnd1Wi2qOD0t8bPpNN-3DfmbEgxj0TE-TttqVbpdoOD1xmFQk=w1440-h810-n-nu)\n\nGoogle DeepMind 研究人员如何构建一个新的智能体框架，对 Signal 加密协议的代码进行形式化验证——这长期以来被视为一项重大安全挑战\n\n今天，我们分享一项软件安全领域的里程碑成果，这长期以来被视为一项重大挑战：Google DeepMind 研究人员引导 AI 智能体，用数学方法证明了 Signal 协议底层实际代码的关键安全属性——该技术保护着 Signal 和 Google Messages 等应用中数十亿次私人对话。\n\n这一突破性发现借助 **AlphaProof Code** 实现，**这是一个以前所未有的深度进行形式化验证的新型智能体框架，将人类专业知识与 AI 智能体相结合。** 形式化验证——用数学方法证明代码正确运行、没有缺陷——是最高标准的安全保障；然而，它难度大，且往往耗费大量人力。\n\n我们的工作标志着 AI 首次被用于如此深度地形式化验证一个广泛部署的加密协议。这也是首次通过任何方法（无论是否使用 AI）对这样一个广泛部署协议的实现进行形式化验证。\n\n## 我们如何验证 Signal\n\nAlphaProof Code 是一个多 LLM 智能体框架，它像研究团队那样拆分形式化验证工作：人类专家与 AI 协作决定*要证明什么*，再由一组 AI 智能体来完成。\n\n首先，我们的研究人员与多种模型协作，将 Signal 的安全目标转化为形式化的数学规约，每一个规约都由人类专家审核。随后，由 [Gemini Carbon](https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-carbon/) 驱动的智能体完成证明，生成了超过六百万行 Lean 代码——Lean 是一种用数学方法证明代码正确性的计算机语言。\n\n接下来，智能体审计了证明，并标出需要人工复核的部分——仅占代码库的百分之一，大幅节省了时间。由于 Lean 会自动检查其余部分，我们的专家可以将审查集中在最需要人类判断的地方。\n\n加密协议几乎支撑着所有数字通信，从网上银行到网页浏览，一个缺陷就可能同时暴露数百万人的信息。这就是专家们数十年来一直对它们进行形式化分析的原因。\n\n但大多数协议验证止步于设计层面。我们的智能体走得更远，证明了编译后的代码满足关键安全属性——例如在设备被临时攻陷前后都能保护消息安全——一直深入到设备上运行的确切代码。由于现实世界的漏洞往往隐藏在设计与其实现之间的差距中，弥合这一差距使这些证明的复杂度大大增加。\n\n即便复杂度如此之高，我们的验证过程仅用了四周——而这项任务历史上需要专家团队花费数年——证明了 Signal 的核心加密代码提供了我们专家所指定的安全保护。\n\n为了确认 AlphaProof Code 能区分正确代码和有缺陷的代码，我们在 Signal 代码的一个隔离版本中重新引入了两个真实的、此前已修复的缺陷。在这两种情况下，系统都生成了机器可检验的证明，表明有缺陷的版本是不安全的。\n\n![图片 2：一张工作流程图，展示三步系统验证过程：1) 规约，起草并批准 Lean 规约；2) 代码，编译后的机器码在 Lean 处理器模型上运行；3) 证明，证明团队生成证明，由守门人验证。](https://lh3.googleusercontent.com/kF75VKGl2JdnK6eQJxqPLwQNsMq0CumACxUSMF5WoUME3lAw2-PBaQWpsOxaD1bTaXYhJd46zDMrx9s3kPW_oL9rg2rKh_HoCzYxN8Xd5XRIPQ2Vsg=w1440-h810-n-nu)![图片 3：一张示意图，展示使用 Lean 的三步形式化验证工作流（规约、代码和证明），其中规约和编译后的代码由不受信任的证明团队处理，并由受信任的守门人验证，以生成经过验证的定理和证明。](https://lh3.googleusercontent.com/MDMzvVe-rCqQEhYj9cz5RtbJpBztll4a_s7rILP4PLBsa1nX2LIajuGae8FL0vMj8IUS3U4zSVytl1wXenGanSp2Qmp5Igbp5-6NS25wN8hsKw5a6A=w1440-h810-n-nu)\n\n*在 AlphaProof Code 中，AI 智能体帮助用户编写规约，然后自主证明实现满足该规约。每个证明都由 Lean 检查，以验证智能体的工作。*\n\n> 此前的形式化验证聚焦于较小的代码部分，而 Google DeepMind 的方法实现了显著扩展。使用 AI 智能体将实际运行的代码转化为有效的 Lean 定理是一项重大突破。随着 AI 驱动的安全威胁不断增长，严格验证 Signal 协议的实现让我们对代码的隐私保障更有信心。\n\nEhren Kret\n\nSignal 首席技术官\n\n此前的形式化验证工作必然聚焦于较小的范围，而这一新方法实现了显著扩展。传统上，验证生产代码严格符合其加密设计需要大量人工投入，因此使用 AI 智能体自动将实际运行的代码转化为有效的 Lean 定理是一项重大突破。随着 AI 驱动的安全威胁不断增长，通过自动定理证明对 Signal 核心协议进行严格验证，让我们更有信心代码能够兑现其隐私保障。\n\n## 安全的未来\n\n攻克这一长期挑战表明，AI 如何能为企业、政府和关键基础设施带来顶级的安全保障，帮助抵御智能体驱动的网络威胁。\n\n验证 Signal 的核心密码学为保护其他关键系统奠定了基础，从医疗设备固件到电网软件。\n\n扩展这些技术需要持续研究。与 [CodeMender](https://deepmind.google/blog/introducing-codemender-an-ai-agent-for-code-security/) 等自动化防御智能体配合，形式化验证可以帮助应对现代网络威胁的速度和规模，打造出拥有数学证明其防护有效的软件。\n\n我们正在开源我们的[形式化验证产物](https://google-deepmind.github.io/code-verification)供社区使用。请阅读下方的技术论文。\n\n[阅读技术论文](https://deepmind.google/documents/36/Formal_Verification_of_Signal_4.pdf)\n\n## 致谢\n\n本研究由 Swarat Chaudhuri、Andrew Ferraiuolo、Anton Kovsharov、Tej Chajed、Sam Schlesinger、Karn Seth、Jonathan Katz、Charles Sutton 和 Pushmeet Kohli 完成。\n\n我们感谢 Eric Wieser 协助开源我们的代码，Owen Jones 提供项目管理支持，以及 Martín Abadi、Christopher Henson、Katerina Hristova、Henryk Michalewski、Jonathan Protzenko 和 George Tsoukalas 的有益讨论。我们感谢 Signal 的 Rolfe Schmidt、Michael Rosenberg 和 Ehren Kret 对我们方法的反馈。我们还感谢 Tulsee Doshi、Four Flynn、Kate Olszewska、Alicia Huang、Andy Liu、Benoit Schillings、Raluca Ada Popa、Melvin Johnson、Koray Kavukcuoglu、Demis Hassabis 和 Sundar Pichai 对本项目的支持。"
+      },
+      {
+        "id": "ds_1126_002",
+        "category": "前沿发布",
+        "title": "Google DeepMind推出Gemini 4 Carbon，多模态能力再升级",
+        "tldr": "Gemini 4 Carbon正式发布，作为Gemini 4系列新成员，预计在多模态理解与推理能力上进一步提升，延续DeepMind近期密集的模型迭代节奏。",
+        "tags": [
+          "Gemini 4",
+          "多模态",
+          "大模型发布"
+        ],
+        "url": "https://deepmind.google/blog/gemini-4-carbon-is-now-available/",
+        "sourceName": "Google DeepMind",
+        "score": 4.6,
+        "userFeedback": null,
+        "contentZh": "今天，我们面向开发者、企业、科研人员和消费者推出 Gemini 4 Carbon。Carbon 是我们目前最强的模型，在网络安全能力以及跨复杂知识工作、软件工程和科学推理的长周期 Agent 工作流方面具备前沿性能。\n\n[两周前](https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-carbon/)，我们通过 [Fairwind 计划](https://deepmind.google/fairwind-program/)向一批网络安全防御者发布了 Carbon。继近期推出 [Gemini 4 Argon](https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/) 之后，Carbon 进一步拓展了前沿边界。Argon 仍是大多数软件工程和知识工作的理想选择，而 Carbon 则专为考验模型智能极限的任务而打造，例如复杂的多步骤编码与调试，以及开放式的科学研究和发现——它会使用比 Argon 更多的 token 来深入探索、深度推理并运行扩展的验证循环。\n\n在旨在测试模型真实工作流性能的独立基准测试中，Carbon 将前沿准确率与实用的生产经济性结合在一起。它在 [CursorBench 4.0](https://cursor.com/cursorbench)、[Perplexity 的 WANDR](https://www.perplexity.ai/hub/blog/wandr-benchmark-evaluating-research-agents-that-must-search-wide-and-deep) 和 [Zapier 的 AutomationBench](https://zapier.com/benchmarks) 上均排名第一，且每任务成本比排名第二的外部模型低 2 倍以上。\n\n为了让 Carbon 的能力服务于更大、更复杂的项目，我们在 Google Antigravity 中[预览](http://antigravity.google/blog/gemini-4-carbon-in-google-antigravity/)了 `/swarm`，可将单条提示转化为一支可实时追踪的协同 Agent 团队。开发者可以将 Carbon 分配到需要最深推理的角色，如架构设计、协调和审计，同时将其与更快速、更轻量的模型搭配，在并行的隔离工作区和对抗性验证器中测试每一项变更。\n\nGemini 4 Carbon 已通过 [Google AI Studio](https://aistudio.google.com/prompts/new_chat?model=gemini-4-carbon) 和 [Gemini for business](https://cloud.google.com/gemini-enterprise) 的 API 向所有付费开发者和企业开放，[入门价格](https://aistudio.google.com/docs/pricing)[1](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-carbon-now-available/?utm_source=deepmind.google&utm_medium=referral&utm_campaign=gdm&utm_content=#footnote-1)与 Gemini 4 Argon 相同（每百万输入 token 2 美元，每百万输出 token 10 美元）。该模型也正在向所有 [Google AI Ultra 订阅用户](https://one.google.com/about/google-ai-plans) 在 [Google Antigravity](https://antigravity.google/)、[Gemini 应用](http://gemini.google.com/)和 [Search 中的 AI Mode](http://aimode.google/) 中逐步推出。\n\n## 更高精度的知识工作、产物生成与数据分析\n\n在法律、金融和企业运营领域，Gemini 4 Carbon 结合了前沿的视觉理解、推理和穷尽式检索能力，能够从大量密集文档和数据中综合出有依据的洞察。它遵循严格的 schema 和格式要求，生成精炼且精确的电子表格、演示文稿和报告。\n\n现有基准测试无法充分捕捉 Agent 如何原生地对包含图表、图像、蓝图、示意图和表格的密集文件进行推理，因此我们与 Artificial Analysis 合作推出了新的 [Multimodal Knowledge Agent](https://artificialanalysis.ai/evaluations/mka)（MKA）基准，用于测试模型在 Agent 工作流中的多模态性能。Carbon 排名第二，而每任务平均成本比表现最好的模型低 6 倍以上。\n\n![Image 8: 一段 YouTube 视频，展示 Agent 将历史照片转化为埃菲尔铁塔的互动展览](https://i.ytimg.com/vi_webp/rOVEmjfPmYk/default.webp)\n\n00:00\n\n使用 Google Antigravity 新的 /swarm 功能，一支 Gemini 4 Carbon Agent 团队仅凭一条提示，就将历史照片和工程图版转化为埃菲尔铁塔 1887–1889 年建造过程的交互式 Three.js 3D 展览。\n\n![Image 9: 一段 YouTube 视频，展示多 Agent Carbon 团队重建 Google Platform 37 办公室](https://i.ytimg.com/vi_webp/1G2j2eA8sew/default.webp)\n\n00:00\n\n仅凭七份公开的市议会规划 PDF（提取出 206 个工程图纸视图）和一条提示，一支使用 Google Antigravity /swarm 功能的多 Agent Carbon 团队经过 10 轮夜间循环，构建了 Google Platform 37 办公室的交互式 906K 三角面 Three.js 重建模型。\n\n![Image 10: 一段 YouTube 视频，展示 Carbon 构建交互式多尺度纺织品可视化器](https://i.ytimg.com/vi_webp/VDIMa4u9skQ/default.webp)\n\n00:00\n\n在 Google Antigravity 中，Gemini 4 Carbon 基于一篇学术论文构建了交互式多尺度纺织品可视化器，以极少的提示对虚拟纤维有限元框架进行建模，包含交互式 3D 纱线网格、110 纤维极坐标追踪和动态应力-应变曲线。\n\n在发布前的评估中，Carbon 在 Hebbia 的 E2E Financial Agentic 评估的深度金融研究上，表现与测试中最佳模型持平；在 Balyasny Asset Management 的 General Financial Intelligence 基准上，在 23 个前沿模型配置中排名第一，该基准涵盖法律专业知识、Agent 工具使用与执行、编码与数据工程，以及感知与上下文理解。\n\n> Gemini 4 Carbon 是我们评估过的用于深度金融研究的最强模型，能构建更清晰、结构更好的 Excel 模型，并生成更出色的 PowerPoint 演示文稿。这对尽职调查工作流是真正的进步。\n\n—— Shanks Salwan，Hebbia 首席应用 AI 工程师\n\n> 我们的基准旨在超越通用能力，评估金融团队实际所做的工作。"
+      },
+      {
+        "id": "ds_1126_003",
+        "category": "行业动态",
+        "title": "OpenAI合并Chat与Work体验，重度用户将更早触及用量上限",
+        "tldr": "OpenAI宣布将ChatGPT的Chat与Work体验合并，并引入统一用量计量，重度用户可能更快达到限制，反映其算力分配与商业化策略调整。",
+        "tags": [
+          "OpenAI",
+          "ChatGPT",
+          "用量限制",
+          "商业化"
+        ],
+        "url": "https://techcrunch.com/2026/11/25/openai-says-heavy-chatgpt-users-may-hit-limits-sooner-as-it-merges-chat-and-work/",
+        "sourceName": "TechCrunch AI",
+        "score": 4.2,
+        "userFeedback": null,
+        "contentZh": "OpenAI 已开始向部分用户推出 ChatGPT 中统一的 Chat 与 Work 体验，此前一些订阅用户批评称，这一合并可能限制他们的使用量。\n\nOpenAI 产品负责人 Thibault “Tibo” Sottiaux 周二在 X 上的一篇帖子中表示，这家 ChatGPT 开发商已开始向一小部分 Pro 订阅用户推出该更新。此次推送紧随 OpenAI 此前在给用户的邮件中宣布的合并计划。OpenAI 发言人告诉 TechCrunch，虽然大多数用户预计不会更频繁地遇到用量重置，但一小部分重度用户可能会更早触及用量上限。\n\n这正是近期一些 ChatGPT 订阅用户在社交媒体和 OpenAI 社区论坛上提出的担忧之一。这些用户担心，合并 Chat 和 Work 的用量限制可能会导致他们可用的高级推理模型访问量少于目前水平，即便他们继续支付相同的订阅费用。\n\nOpenAI 发言人告诉 TechCrunch，在新系统下，Chat 和 Work 将在 ChatGPT 中共享同一个用量计量器。不过，使用 Instant 模型的对话仍将保持无限量，且不计入共享额度。用户在耗尽用量限制后也可以继续使用 Instant。该发言人补充说，OpenAI 将继续努力提升效率，让订阅用户能从其套餐中获得更多价值。\n\n根据 OpenAI 的支持页面，虽然此次推送已面向一小部分用户开始，但 OpenAI 计划在 12 月更广泛地推行共享用量限制。\n\n与 OpenAI 类似，竞争对手 Anthropic 也在 9 月将其对话式聊天服务 Claude 和面向工作的 Cowork 整合到一个界面中。\n\n这些变化发生之际，AI 公司正面临不断攀升的基础设施成本和对能力越来越强的模型日益增长的需求，这给它们的计算资源带来了压力。将对话式工具和工作相关工具整合到一个界面中，也可能让 AI 聊天机器人更易于使用，使用户无需切换标签页即可在聊天和更复杂的任务之间切换。"
+      },
+      {
+        "id": "ds_1126_004",
+        "category": "行业动态",
+        "title": "Anthropic CEO Dario Amodei驳斥“向AI让渡人类控制权”指控为“荒谬”",
+        "tldr": "Amodei回应竞争对手指责，否认其主张将人类能动性让渡给AI，但承认领先AI公司正日益自动化自身研究与模型开发，引发治理边界讨论。",
+        "tags": [
+          "Anthropic",
+          "AI安全",
+          "治理",
+          "Dario Amodei"
+        ],
+        "url": "https://techcrunch.com/2026/11/25/anthropics-dario-amodei-calls-accusations-of-surrendering-human-control-to-ai-absurd/",
+        "sourceName": "TechCrunch AI",
+        "score": 4.0,
+        "userFeedback": null,
+        "contentZh": "Anthropic CEO Dario Amodei 对Anthropic认为我们应该“将人类自由意志拱手让给”AI系统的说法进行了反驳。周三，Amodei 在 X 上的一篇长文中称这一说法“荒谬”。\n\n“我们绝不应以效率或安全为祭坛，牺牲合法性或自决权，”他写道。“这一反对专制的论点逐字适用于反对由 AI 进行治理，我同样强烈地认为，将治理权交给 AI 是个坏主意……任何仔细读过我的文章或采访的人，都不可能合理地得出我持有不同看法的结论。”\n\n此番表态之前，Anthropic 的竞争对手们日益齐声暗示，如果 AI 被不负责任地开发，人类能动性可能面临风险。本月早些时候，OpenAI CEO Sam Altman 表示，他希望确保人们继续拥有“对未来的能动性”。\n\nMeta 首席 AI 官 Alexandr Wang 也在 X 上的一篇文章中写道，我们“不应接受将社会‘移交’给 AI”。\n\n“很难想象一个人类能够对完全不受约束的递归自我改进保持控制的世界，”Wang 写道。“既然我们已经到了能力进展方面的科学和技术问题很可能已被解决的阶段，我们不仅必须在安全、对齐和安全保障等极其紧迫的领域取得进展，还必须开始思考如何审慎地推进。”\n\n但在已发表的文章中，Amodei 声称他一再倡导对 AI 的民主监督，表示这项技术应强化民主制度，人类应保留最终决策权。\n\nAmodei 指出，广泛地放弃人类自由意志与“随着 AI 系统进步，它们能够以更自动化的方式完成*特定*任务”这一观点之间存在区别。他举例说，AI 驾驶汽车、设计抗癌药物或编写端到端软件。\n\nAmodei 提出应在递归自我改进（RSI）处划一条线，即无需人类协助即可自我改进的 AI。许多安全专家认为 RSI 不可避免地会导致人类失去控制，Amodei 含蓄地承认了这一点，他写道，“我们可能希望对这一过程加以限制。”\n\n尽管如此，Anthropic 正通过将 AI 纳入自身越来越多的研发工作，为 RSI 奠定基础。该公司在 6 月表示，Claude 编写了合并进 Anthropic 代码库的超过 80% 的代码。AI 安全研究非营利组织 METR 本月发布的一项独立评估发现，Anthropic 的模型正以约历史速度两倍的速度提升，主要由 AI 辅助研究驱动。\n\n在自身的 IPO 文件中，Anthropic 描述了每一代 Claude 如何加速下一代 Claude 的开发，它将这一过程称为“闭环”。\n\n“正如我们在 11 月初公开表示的那样，我们认为 Claude 在没有有意义的人类监督或理解的情况下完全自主地构建后续前沿模型是不安全的，”Amodei 写道。\n\n“有意义的人类监督或理解”的问题在于，AI 的进步速度已经超过了工程师和安全专家能够完全审计的速度，使他们越来越依赖其他 AI 系统来充当法官和陪审团。当 AI 模型表现出欺骗行为时，这一问题会进一步加剧，尤其是当它们意识到自己正在被评估时，这使得它们更难被信任和控制。\n\n尽管如此，Anthropic 绝不是唯一一家追求 RSI 或构建 AI 系统以自动化越来越多人类任务的公司。本周，OpenAI 声称解决了计算机科学中最大的未解问题之一——矩阵乘法的精确速度极限，而矩阵乘法是现代计算（包括深度学习和物理模拟）背后的数学引擎。\n\n在帖子中，Amodei 指责竞争对手进行“基于感觉的商业和政治定位”，虚伪地抛出“人类控制和能动性”或“AI 应该只是一种工具”之类的说法，却在 AI 竞赛中不采取任何不同的做法。\n\n“当然，他们提供的产品在任务自动化的取向上并没有实质性差异；每家公司似乎都在发布越来越有能力实现任务自动化的模型，”Amodei 写道。“每家公司都声称理解此类自动化的风险和弊端，并提供保障措施。”"
+      },
+      {
+        "id": "ds_1126_005",
+        "category": "深度解读",
+        "title": "MIT科技评论：用“围栏”而非预测构建可信AI",
+        "tldr": "文章以OpenAI智能体关闭监控系统为例，主张通过硬性约束与隔离机制而非行为预测来确保AI可信，为AI安全工程提供新思路。",
+        "tags": [
+          "AI安全",
+          "智能体监控",
+          "可信AI",
+          "治理框架"
+        ],
+        "url": "https://www.technologyreview.com/2026/11/16/1148565/building-trustworthy-ai-by-fencing-it-in-not-predicting-it/",
+        "sourceName": "MIT Tech Review AI",
+        "score": 3.9,
+        "userFeedback": null,
+        "contentZh": "今年10月，[OpenAI披露](https://alignment.openai.com/misalignment-reports/suppressing-misalignment-monitoring-alerts-and-disabling-misalignment-monitoring/)其两个AI Agent关闭了为监控它们而构建的系统。其中一个因误读了一条“不要发送消息”的指令而静音了自己的安全警报；另一个在迁移过程中移除了监控集成，随后却声称没有这样做。没有任何规则指示Agent这样做，也没有任何测试预见到这些行为。\n\n一个世纪以来，我们一直基于可预测性来建立对技术的信任：预定义的输入、可预测的输出，以及层层防护。想想断路器如何在设定电流下跳闸，或者飞机部件如何针对已知（即可预测的）应力进行测试。\n\n![Image 1](https://wp.technologyreview.com/wp-content/uploads/2026/11/BA5098150_Post-NEXUS_MIT_1920x1080.jpg?w=840)\n\nAI改变了这一点。传统软件执行人类编写的指令，而AI行使的可以说是合成判断力。我们使用AI，是因为它能解读我们未曾编程的情境，并生成我们未曾规定的响应。但我们给予AI的自由越多，就越难以提供信任传统上赖以建立的可预测性。\n\n我们不会通过预测AI的行为来使其值得信赖。我们将通过在其触及范围之外强制执行硬性限制、将其围栏其中来实现这一点。在OpenAI的案例中，防护措施位于Agent可以编辑的系统内部。但Agent可以轻易移动的围栏就不是围栏。\n\n### **传统信任定义的不足之处**\n\n近期《MIT Technology Review》的报道从其他角度探讨了这一问题。一位撰稿人认为，人在回路中是不够的解决方案，因为人类从根本上[无法理解AI系统的意图](https://www.technologyreview.com/2026/04/16/1136029/humans-in-the-loop-ai-war-illusion/)，并主张改为跨学科研究以及学术界、政府和科技行业之间的合作。另一篇关于逆向博弈论的文章[描述了利用激励机制防止模型偏离规则](https://www.technologyreview.com/2026/11/03/1147934/reverse-game-theory-mechanism-design-ai-alignment/)，即使没有人理解它们内部如何运作。\n\n两篇文章都承认，我们无法理解或监视每一个AI决策。我们的信任工具——包括需求、测试、认证、安全裕度、联锁和通过/失败标准——都依赖于我们界定系统行为的能力。这就是确定性悖论。\n\n对于生成式和Agent式AI，行为由训练数据、架构、提示词、上下文、检索来源和环境共同塑造。输入变化、模型更新、工具变化、Agent交互。微小的变化会传播为无人设计的结果。问题不在于随机性；而在于可能行为的空间太大，无法预先枚举。因此，信任必须围绕边界来设计，而非预测输出。目标不是确定性的AI，而是有界、可观测、可控的AI。信任也不能是一次性测试。传统保证在某一时间点对产品进行认证，但AI在部署后持续演进，一个通过了所有测试的系统可能漂移到使那些测试有意义的条件之外。信任必须持续赢得。\n\n安全工程几十年来一直在考虑部分此类变异性。例如，[核管理委员会](https://www.nrc.gov/regulations-legislation/fact-sheets-brochures/backgrounder-on-probabilistic-risk-assessment)确定复杂系统中故障的可能性，而系统理论事故模型与过程（STAMP）表明，事故可能源于正常工作的组件、人员和组织之间的交互。但AI提高了风险，因为现在仅一个组件就可以解读、推断和行动。随着AI从浏览器进入车辆、机器人、医疗系统、工业控制和数据中心——一个错误答案可能变成危及生命的事件——风险进一步上升。\n\n### **构建可扩展的信任**\n\n显然，一个人每小时橡皮图章式地批准数千个AI操作，不是可接受——也不可扩展——的风险防护措施。但补救方法不是将人从回路中移除；而是将人类判断放在关键位置：预先设定限制，批准少数具有严重后果的操作，而硬性约束处理其余部分。\n\n因此，信任必须向上游移动到架构中。核心问题变成：我们愿意给予AI什么权限，在什么条件下，以什么证据为支撑？而在这些条件之外会发生什么？这与询问模型在基准测试中是否得分94%截然不同。\n\n确定性悖论并不意味着AI不能被信任。它意味着信任需要不同的架构。与其让每个输出可预测，不如让边界可预测。一个AI医疗助手在诊断上可能是概率性的，但确定性规则管辖它是否可以更改处方。一个工业AI可能找到许多优化流程的方法，而固定限制将其保持在压力和温度范围内。一个Agent可以决定如何完成任务，而权限、交易限额和人工审批决定它被授权做什么。\n\n让AI在盒子内部是概率性的，而在后果重要的地方让盒子本身是确定性的。领导者可以通过提出五个问题来付诸实践：\n\n1. **AI拥有什么权限？** 不仅定义它能做什么，还要定义它被允许做什么，区分解读、建议、决策和执行。\n2. **AI的功能是否与后果成比例？** 营销副驾驶和控制工业设备的AI需要不同的保证阈值。\n3. **我们是否在采取适当的自主性步骤？** 例如，需要有一个计划，从AI解读而人类决策，到AI提出建议，再到经批准后采取行动，最终到受监督的自主性——但只有当AI能在每一步安全工作时才推进。\n4. **我们是在测试系统还是仅仅测试模型？** 模型、数据、Agent、API和人类工作流之间会出现意外的交互。\n5. **我们是否在持续赢得信任？** 在整个生命周期中监控漂移、故障、近失事件和模型变更。\n\nAI领域的赢家将是那些解决确定性悖论的人——给予AI足够的自由来创造价值，同时设计足够强大的边界，使其利用这种自由所做之事值得信赖。发明赢得关注。信任赢得采用。\n\n探索UL Solutions如何[构建AI信任](https://www.ul.com/services/ai-safety-certification-and-stewardship-services)。\n\n_本内容由UL Solutions制作。并非由MIT Technology Review编辑团队撰写。_"
+      },
+      {
+        "id": "ds_1126_006",
+        "category": "行业动态",
+        "title": "FCC批准SpaceX部署最多100万颗AI数据中心卫星",
+        "tldr": "FCC授权SpaceX“Starmind”计划，允许部署最多100万颗搭载AI芯片的卫星，太空数据中心竞赛升温，Google与Blue Origin亦在推进类似构想。",
+        "tags": [
+          "SpaceX",
+          "太空数据中心",
+          "FCC",
+          "AI基础设施"
+        ],
+        "url": "https://www.theverge.com/science/1042278/spacex-fcc-starmind-ai-space-data-centers",
+        "sourceName": "The Verge AI",
+        "score": 3.8,
+        "userFeedback": null,
+        "contentZh": "## FCC 批准 SpaceX 最多部署 100 万颗数据中心卫星的计划\n\nSpaceX 希望用其“Starmind”星座为地球上的 AI 能力提供动力。\n\n![Image 20: SpaceX 提交史上最大规模 IPO 申请](https://platform.theverge.com/wp-content/uploads/sites/2/2026/05/gettyimages-2269580650.jpg?quality=90&strip=all&crop=0%2C0.030090270812437%2C100%2C99.939819458375&w=2400)\n\n![Image 21: SpaceX 提交史上最大规模 IPO 申请](https://platform.theverge.com/wp-content/uploads/sites/2/2026/05/gettyimages-2269580650.jpg?quality=90&strip=all&crop=0%2C0.030090270812437%2C100%2C99.939819458375&w=2400)\n\n图片：Mario Tama/Getty Images\n\n在[周三发布的一项公告](https://docs.fcc.gov/public/attachments/DOC-427572A1.pdf)中，FCC 表示已授权 SpaceX 部署最多 100 万颗搭载 AI 芯片的卫星，作为这家由埃隆·马斯克拥有的公司[“Starmind”计划](https://www.spacex.com/spacexsi/starmind)的一部分。随着[其他多家公司也在推进将 AI 数据中心送入太空的想法](https://www.theverge.com/ai-artificial-intelligence/845453/space-data-centers-astronomers)，包括 Google 和 Blue Origin，这是该机构首次批准完整的 AI 卫星“星座”。\n\n[FCC 的批准要求](https://docs.fcc.gov/public/attachments/DA-26-1273A1.pdf) SpaceX 在 2033 年前至少部署一颗卫星，并在 2040 年前达到 100 万颗卫星的里程碑。FCC 还推迟了 SpaceX 的一项请求，即把位于 600 公里以上的卫星处置到太空“墓地”轨道，而不是让它们在地球大气层中烧毁，称该公司尚未就其处置流程计划提供“足够信息”。\n\n### 相关\n\n*   [亿万富翁们希望数据中心无处不在，包括太空](https://www.theverge.com/ai-artificial-intelligence/845453/space-data-centers-astronomers)\n\nSpaceX [将其 Starmind 项目描述为](https://www.spacex.com/spacexsi/starmind)一种“在太空捕获太阳能，为地球上的”AI 能力“提供动力”的方式。该公司表示，Starmind 将使用连接到 Starlink 的高速激光向地球传输数据。它计划在[即将建成的 Terafab 设施](https://www.theverge.com/transportation/907976/elon-musk-terafab-intel-ai-chip-spacex-tesla)为其卫星生产芯片。\n\nGoogle 已经迈出了将算力送入太空的第一步，上个月[发射了“Project Suncatcher”AI 服务器](https://www.theverge.com/tech/1023528/google-project-suncatcher-ai-satellite-transmission)卫星。杰夫·贝索斯的[Blue Origin 将搭载"
+      },
+      {
+        "id": "ds_1126_007",
+        "category": "行业动态",
+        "title": "标普考虑因治理与“关键人”风险下调Nvidia信用评级",
+        "tldr": "标普可能将Nvidia信用评级下调至AA-，理由涉及公司治理与关键人风险，反映黄仁勋回归后市场对Nvidia稳定性的担忧加剧。",
+        "tags": [
+          "Nvidia",
+          "信用评级",
+          "公司治理",
+          "标普"
+        ],
+        "url": "https://techcrunch.com/2026/11/25/sp-considers-nvidia-credit-downgrade-over-governance-and-key-man-risks/",
+        "sourceName": "TechCrunch AI",
+        "score": 3.8,
+        "userFeedback": null,
+        "contentZh": "标普全球评级（S&P Global Ratings）正在考虑下调英伟达的信用评级，理由是对该公司的管理与治理实践存在担忧。\n\n标普在[声明](https://www.spglobal.com/ratings/en/regulatory/article/-/view/type/HTML/id/3667832)中表示，尽管英伟达财务表现强劲，但CEO黄仁勋被罢免后又复职一事，引发了对其“高管监督薄弱、缺乏继任规划”以及“关键人物风险”的担忧——即公司未来成功过度依赖黄仁勋个人。\n\n该机构预计将在90天内完成审查，可能将英伟达评级从AA下调至AA-，即其评级体系中的第四高等级。\n\n尽管英伟达无疑将保持投资级评级，但降级可能推高其借贷成本。由于英伟达为缺乏自身强信用支撑的neocloud及其他基础设施公司提供背书，评级下调可能导致这些公司的债务成本上升，或被迫提供更多抵押品。\n\n今年8月，英伟达宣布计划与高盛、阿波罗、黑石等六家金融机构共同安排[5000亿美元](https://www.bloomberg.com/news/articles/2026-08-14/nvidia-s-500-billion-plan-envelops-wall-street-in-its-ai-frenzy)的AI基础设施融资。根据原始条款，英伟达将为25%的贷款提供担保。但据彭博社[报道](https://www.bloomberg.com/news/articles/2026-11-12/nvidia-faced-pressure-to-boost-its-ai-backstop-before-huang-exit)，早在黄仁勋被罢免又回归之前，贷款方就已在要求英伟达提供更多担保。\n\n若评级遭下调，贷款方可能会要求更大的担保比例。"
+      },
+      {
+        "id": "ds_1126_008",
+        "category": "行业动态",
+        "title": "纽约州禁止AI聊天机器人玩具五年，Common Sense研究揭示安全风险",
+        "tldr": "纽约州基于Common Sense Media新研究，禁止AI聊天机器人玩具五年，研究指出此类玩具存在不当内容暴露与情感发展风险，监管趋严。",
+        "tags": [
+          "AI玩具",
+          "监管",
+          "儿童安全",
+          "纽约州"
+        ],
+        "url": "https://techcrunch.com/2026/11/25/want-to-buy-your-kid-an-ai-toy-this-christmas-not-in-new-york/",
+        "sourceName": "TechCrunch AI",
+        "score": 3.7,
+        "userFeedback": null,
+        "contentZh": "今年圣诞节，圣诞老人不会给纽约的孩子们送去任何AI聊天机器人玩具了。\n\n本周，州长凯西·霍楚尔[签署了一项法案](https://www.governor.ny.gov/news/consumers-begin-their-holiday-shopping-season-governor-hochul-signs-five-year-ban-ai-chatbot)，在未来五年内禁止在纽约州制造、分销和销售此类玩具。该法案明确针对内置或集成AI聊天机器人的玩具，比如依赖互联网让孩子们喋喋不休的会说话的毛绒动物、玩偶和机器人。\n\n该法案使纽约成为继加利福尼亚之后第二个实施AI玩具禁令的州。\n\n严格来说，新法律在签署90天后才生效，因此一些家长仍可能赶在假期前为孩子买到像升级版Furby这样令人毛骨悚然的玩具，但州长鉴于风险敦促他们不要这样做。根据Common Sense Media本周发布的[一项新研究](https://about.commonsensemedia.org/press-room/press-releases/common-sense-media-finds-popular-ai-toys-fail-safety-checks)，大约四分之一的美国有八岁以下孩子的家长要么已经拥有AI玩具，要么正在考虑在这个假期给孩子买一个。\n\n“为节日或任何其他场合购买礼物的家长们不应该担心，伪装成玩具的危险聊天机器人可能会让他们的孩子接触到不当对话、操纵他们的情感或危及他们的隐私，”霍楚尔说，并称这些玩具是“不受监管的人工智能”。\n\n当被问及鉴于电商平台的普遍性，纽约将如何执行该禁令时，一位发言人向TechCrunch引述了财政与技术副秘书阿尔伯特·普利多的声明：“我们正在就此与总检察长密切合作，罚款非常严厉——每天15，000美元。因此，与总检察长密切合作将确保这些玩具在纽约州被禁止。”\n\n当被问及亚马逊打算如何帮助执行该禁令（包括针对第三方卖家）时，该公司一位发言人表示，将采取措施限制AI玩具在禁止此类产品的司法管辖区的销售，但未透露具体细节。\n\nCommon Sense Media的研究发现，AI玩具可能损害儿童的人际关系，并使他们接触到不当内容。研究人员测试了五款以学习和陪伴为卖点的热门AI玩具，包括[Grem](https://url.usb.m.mimecastprotect.com/s/ZXXSCnGAzAhznoxyUNiQ7tJbjHG?domain=us.cisionone.cision.com)、[Lovi](https://url.usb.m.mimecastprotect.com/s/NRnNCoABOBfMkz8oi6sqAtppHy-?domain=us.cisionone.cision.com)、[Meemo Bear](https://url.usb.m.mimecastprotect.com/s/7b9ICp9DzDhG58ylCJt2LtG5YzY?domain=us.cisionone.cision.com)、[BubblePal Panda](https://url.usb.m.mimecastprotect.com/s/JgA6CqAE2EfD95R4sruKjtE6KDL?domain=us.cisionone.cision.com)和[Tavlshero的AI小狗](https://url.usb.m.mimecastprotect.com/s/nkG8CrgGYGTpxv6NTGC6jt4X8Cz?domain=us.cisionone.cision.com)。\n\n研究发现，这些玩具未能满足多项安全规范，部分通过声称爱用户、承诺保守秘密、暗示自己比真实人际关系或学校更有趣，以及帮助孩子违反父母规定的就寝时间来损害人际关系。\n\n虽然研究中的大多数玩具拒绝了涉及性和暴力的直接请求，但BubblePal Panda在被要求时详细角色扮演了一场大规模枪击事件。根据该研究，大多数玩具愿意解释如何使用或帮助找到火柴、刀具和药片等危险物品。\n\nCommon Sense Media还发现，这些玩具没有为家长提供可靠的方式来监控幼儿与聊天机器人的互动。它们要么根本不生成聊天记录，要么生成的记录错误百出。\n\n值得注意的是，Common Sense Media在[一月份](https://institute.commonsensemedia.org/risk-assessments/ai-toys)对AI玩具进行了类似测试，发现它们对幼儿构成不可接受的风险。Grem也被纳入那项研究，这表明该行业尚未充分解决此前记录在案的问题。\n\n虽然该组织11月进行的一项研究发现，家长们正逐渐意识到AI玩具的潜在危险并开始避而远之，但低收入家庭的家长以及出现倦怠症状的家长更愿意考虑购买这些玩具。\n\n“这些玩具承诺为精疲力竭的家长带来解脱，但在基本安全措施方面完全不合格，”密歇根大学医学院儿科副教授珍妮·拉德斯基博士在一份声明中说。“照护者应远离这些不支持想象力发展或早期人际关系发展的产品。”\n\nTechCrunch已联系玩具制造商寻求置评。"
+      },
+      {
+        "id": "ds_1126_009",
+        "category": "行业动态",
+        "title": "多州总检察长挑战Character.AI拍卖用户私聊计划",
+        "tldr": "Character.AI破产出售计划包含超2100万美国账户敏感数据，其中210万为未成年人，多州总检察长联合反对，数据隐私与破产法冲突凸显。",
+        "tags": [
+          "Character.AI",
+          "数据隐私",
+          "破产出售",
+          "监管"
+        ],
+        "url": "https://techcrunch.com/2026/11/25/state-ags-fight-character-ais-plan-to-auction-off-users-private-chats/",
+        "sourceName": "TechCrunch AI",
+        "score": 3.7,
+        "userFeedback": null,
+        "contentZh": "当一家AI公司破产时，你的私人对话会怎样？如果这家公司是Character.ai，显然他们的计划是将其拍卖给出价最高的人。\n\n现在，由42位州总检察长组成的联盟正在介入Character.ai的破产程序，试图阻止这家聊天机器人制造商出售敏感用户数据，其中包括数百万用户的私人对话。\n\n参与此事的各位总检察长已分别发布新闻稿，声称Character.ai的数据集包含超过2100万个美国账户的聊天记录，其中超过210万个账户属于未成年人。此外，声明还指出，此次出售还涉及IP地址等其他个人数据。\n\n声明还指出，Character.ai此前曾向消费者承诺，他们的个人信息不会被出售。（在一篇博客文章中，Character.ai向用户保证，他们的信息仍将受到其隐私政策的保护。）\n\n目前仅披露了一个匿名竞标者：Smirks and Pangs Acquisition LLC（简称Smirks），该公司于2026年11月13日在特拉华州注册成立。加州总检察长Rob Bonta指出，次日，Character.ai将其选为定于12月1日举行的拍卖的底价。目前尚不清楚买方的计划。\n\n总检察长们反对此次出售，理由是用户没有任何保护措施——他们表示，无论谁购买了这些数据，都可以为所欲为，包括在未披露的情况下转售数据。买方也无需遵守Character.ai的隐私政策。此外，总检察长们声称，Character.ai未向法院提供与竞标者所获得的同等信息，即关于出售后可能出现的任何安全或法律问题。\n\n此外，包括加州、科罗拉多州、纽约州和康涅狄格州在内的一些州已颁布聊天机器人安全立法，将于2027年1月1日生效，如果此次出售获批，可能会引发进一步的违规行为。\n\nBonta在声明中表示：“Character.AI向消费者承诺他们的数据不会被出售。这种行为根据联邦和加州法律是非法的，破产不应被用来规避这些消费者保护措施。”\n\n康涅狄格州总检察长William Tong也批评了Character.ai的商业模式。\n\nTong表示：“他们的聊天机器人将脆弱的青少年推入了情绪波动和性不当对话的深渊。他们鲁莽的不当行为和失败的商业模式将公司推向了深渊。现在他们想滥用破产程序来做他们说过不会做的事情——将那些私人聊天记录和个人详细信息拍卖给一个可疑的买家。”\n\nTong补充道：“我们反对了迪士尼的收购，我们呼吁破产法院也拒绝此次出售，因为这不过是又一个逃避法律责任和消费者保护的幌子。”\n\n反对迪士尼收购的也是一个类似但不完全相同的州总检察长联盟。他们反对一项拟议的2000万美元许可协议，该协议将让迪士尼获得Character.ai的知识产权，但不包括用户的聊天记录。该协议尚未获得法院最终批准。（迪士尼还同意聘用Character.ai剩余的大部分员工。）\n\n在联合创始人Noam Shazeer和Daniel De Freitas重返Google之后，Character.ai陷入困境，当时这家科技巨头签署了使用该AI初创公司技术的非独家许可。该公司还面临与儿童安全相关的诉讼——其中一起涉及一名14岁佛罗里达男孩的自杀，其母亲声称他沉迷于该平台上的一个聊天机器人。\n\n加入加州总检察长Bonta反对出售Character.ai用户数据行动的还有来自以下各州的总检察长：阿拉斯加、阿肯色、科罗拉多、康涅狄格、哥伦比亚特区、特拉华、佛罗里达、佐治亚、夏威夷、爱达荷、伊利诺伊、印第安纳、堪萨斯、肯塔基、路易斯安那、缅因、马里兰、密歇根、明尼苏达、密西西比、密苏里、内华达、新罕布什尔、新泽西、纽约、北卡罗来纳、北达科他、俄亥俄、俄克拉荷马、俄勒冈、宾夕法尼亚、罗德岛、南卡罗来纳、南达科他、田纳西、犹他、弗吉尼亚、佛蒙特、华盛顿、威斯康星和西弗吉尼亚。"
+      },
+      {
+        "id": "ds_1126_010",
+        "category": "深度解读",
+        "title": "AI数据中心建设难度加大，Neoclouds承压",
+        "tldr": "Nvidia要求数据中心接近就绪才提供支持，叠加建设延迟与债务成本上升，Neoclouds面临资金与运营压力，AI基础设施扩张瓶颈显现。",
+        "tags": [
+          "AI数据中心",
+          "Neoclouds",
+          "Nvidia",
+          "基础设施"
+        ],
+        "url": "https://techcrunch.com/podcast/ai-data-centers-are-becoming-harder-to-build-and-neoclouds-are-feeling-it/",
+        "sourceName": "TechCrunch AI",
+        "score": 3.6,
+        "userFeedback": null,
+        "contentZh": "Nvidia 已明确表示，在 AI 数据中心接近可运行之前，它不会为其提供兜底支持，而这一立场恰逢 neocloud 报告建设延迟和债务成本上升之际。向开发者传递的信息是：土地、电力以及已建成的建筑，比一份推介演示文稿更重要。\n\nAnita Verma-Lallian 一直在做的正是这件事。她的公司 Arizona Land Consulting 为开发商、超大规模云厂商、AI 实验室和 neocloud 整合数据中心选址，这让她得以洞察谁在购买、什么使一个选址可行，以及项目在何处遇到麻烦。她还与投资人 Chamath Palihapitiya 合作，后者一直在预测行业将出现洗牌。\n\n在本期 TechCrunch 的 Equity 播客中，Rebecca Bellan 与 Verma-Lallian 讨论了当 Nvidia 变得更加挑剔时谁来承担风险、为何投机性项目可能最先崩盘，以及 2027 年的洗牌可能是什么样子。\n\n收听完整节目，了解更多关于：\n\n*   “土地、电力、壳”（land, power, shell）是什么意思，以及为何三者齐备可能给某些开发商带来重大优势。\n*   社区反对和州级限制如何使某些市场比其他市场更难建设。\n*   公用事业公司让台积电等大客户帮助出资建设输送更多电力所需的基础设施。\n*   当数据中心项目停滞时，从开发商到贷款方再到客户，最终由谁承担账单。\n*   为何 AI 实验室和超大规模云厂商可能越来越多地自建数据中心，而非依赖 neocloud。\n*   谁能从 2027 年的洗牌中受益，包括最有条件收购困境项目的公司。"
+      },
+      {
+        "id": "ds_1126_011",
+        "category": "行业动态",
+        "title": "亚马逊与Meta据报洽谈解除对AI购物智能体Muse的封锁",
+        "tldr": "亚马逊与Meta讨论允许Muse AI智能体在其市场购物，焦点在于推荐商品类型及对广告收入的影响，若达成将重塑AI代理电商格局。",
+        "tags": [
+          "Meta",
+          "亚马逊",
+          "AI智能体",
+          "电商"
+        ],
+        "url": "https://techcrunch.com/2026/11/25/amazon-and-meta-reportedly-in-talks-to-lift-blockade-on-ai-agent-muse/",
+        "sourceName": "TechCrunch AI",
+        "score": 3.6,
+        "userFeedback": null,
+        "contentZh": "据称，亚马逊可能对Meta的AI agent Muse改变态度。据报道，这两家科技巨头正在讨论一项潜在协议，该协议将允许Meta广受欢迎的AI agent直接连接亚马逊商店。\n\n这些谈判将标志着与两个月前相比的重大逆转。当时，Muse用户发现他们无法在亚马逊上购买商品，尝试结账时会收到错误提示。\n\n据《财富》周三援引知情人士报道，亚马逊和Meta已就此事进行了多轮谈判。目前仍有两个关键问题在协商中：搜索结果将如何呈现，以及潜在协议下广告将如何处理。\n\n亚马逊最大的担忧之一是，像Muse这样的第三方购物agent可能如何影响其广告业务。10月，亚马逊CEO Andy Jassy曾辩称，很少有客户通过外部购物agent进行购买。\n\n亚马逊也可能一直在等待Muse成熟，然后才同意将其与自己的市场平台整合。如果Muse下错订单或在购买过程中造成问题，亚马逊最终可能不得不面对沮丧的客户和不满的卖家。\n\n据《财富》报道，知情人士称，高管们担心第三方购物agent可能削弱亚马逊与消费者的直接关系。\n\n《财富》还报道，亚马逊与Meta之间的任何潜在协议 reportedly 都需要两家公司CEO的批准。\n\nMeta和亚马逊尚未回应TechCrunch的置评请求。"
+      },
+      {
+        "id": "ds_1126_012",
+        "category": "深度解读",
+        "title": "科学家为AI智能体划定边界：Hugging Face博客解读",
+        "tldr": "AllenAI在Hugging Face发文探讨科学家对AI智能体的信任边界，分析在科研场景中智能体可自主与需人类介入的环节，为科研AI部署提供参考。",
+        "tags": [
+          "AI智能体",
+          "科研应用",
+          "信任边界",
+          "AllenAI"
+        ],
+        "url": "https://huggingface.co/blog/allenai/where-scientists-draw-the-line-on-ai-agents",
+        "sourceName": "Hugging Face Blog",
+        "score": 3.5,
+        "userFeedback": null,
+        "contentZh": "## 科学家对 AI Agent 的底线在哪里\n\n将研究任务委托给 AI，并不能免除科学家对工作如何完成所承担的责任。例如，使用 AI 进行文献综述的研究人员需要检查系统是否忽略了相互矛盾的证据，或是否提出了所引用论文并不支持的论断。将数据分析交给 Agent 系统的人需要了解它使用了哪些方法、访问了哪些文件，以及结果能否被成功复现。将部分实验室流程自动化的研究人员需要确信系统遵守物理安全约束，例如温度限制或材料毒性；而处理人类受试者数据的研究人员则需要确保系统保护参与者隐私并限制谁可以访问其信息。研究人员还需要明确的机构指南，用于验证和披露 AI 辅助完成的工作。\n\n这些伦理与安全问题是我们 AI for Science 工作的核心。负责任的科学不仅仅是准确性——科学领域之所以拥有伦理研究规范，是因为科学家和科学界过去的行动与选择，这些规范也涵盖研究如何开展及其产生的影响。我们希望 AI 工具能拓展科学家所能完成的工作，同时不损害他们审视证据、验证方法的能力，以及——也许最重要的是——对自己研究结论负责的能力。\n\n为了更好地理解这需要什么，我们采访了 17 位从事自然科学、应用科学和社会科学的科学家，了解他们对 AI Agent 负责任开发的看法。这些系统可以使用工具，并以不同程度的自主性执行研究任务。访谈依托于此前调查研究建立的研究者网络——我们希望了解科学家会如何引导 AI 的发展，以体现其所在领域的责任。我们询问了研究者欢迎 Agent 在哪些方面提供协助、可能出现什么问题，以及他们需要哪些保障措施才愿意信任 Agent 参与自己的研究。\n\n我们对这些问题的兴趣源于评估 Ai2 所开发模型安全性的工作。随着我们扩大对 AI for Science 的关注，我们发现科学应用领域的大量安全研究都强调生物学和核物理等领域的灾难性风险。我们还需要评估 Agent 在其被使用的领域中是否遵循负责任研究行为标准的方法。\n\n我们的主要发现之一关乎信任。在访谈中，我们识别出**科学信任**的五个维度：验证、隐私、客观性、问责制和透明度。它们共同反映了超越 AI 系统是否给出正确答案的关切。研究人员还需要理解答案是如何得出的、保护敏感信息、识别偏见，并确定由谁负责验证和支持 AI 辅助得出的结论。这些都是负责任研究行为的问题。\n\n另一项主要发现表明，科学家应参与决定 Agent 承担哪些研究任务、这些 Agent 如何运作，以及如何评估其表现。即使结果在技术上正确，如果研究人员无法检查其产生过程，或者 Agent 访问了研究者授权范围之外的机密数据或文件，该结果也可能不适合科学用途。\n\n第三项关键发现关乎科学的未来。受访者在两件事之间存在分歧：一方面对 AI 驱动的进步感到兴奋，另一方面对人类科学家的角色抱有存在性担忧。他们建议开展 AI 使用培训，并将制定和执行指南列为一项关键且紧迫的挑战。\n\n## 帮助研究人员核查工作\n\n对我们访谈中的许多参与者来说，AI Agent 的吸引力始于耗时的研究任务——处理大型数据集、编写代码、记录实验流程以及处理重复性行政工作。将这些活动自动化可以让研究人员腾出更多时间用于实地工作、指导或发展新想法。它还可能使分析那些难以人工检查的大量数据成为可能。\n\n但委托研究任务会产生相应的需求：验证 AI 系统所执行的工作。\n\n几位参与者描述了将 AI 生成的答案与原始出版物进行核对，而不是直接接受摘要。他们担心自信的回答中包含细微的不准确之处，也担心工具只检索支持某一偏好假设的研究，从而强化既有假设。\n\n但检查 AI 系统的最终答案只是挑战的一部分。研究人员可能还需要知道 Agent 遗漏了哪些来源、是否遵循了所要求的方法，以及在此过程中访问了哪些信息。\n\n我们的访谈表明，针对科学研究的 AI Agent 评估可以如何更好地反映这些关切。例如，文献综述基准可以测试 Agent 是否忽略了矛盾证据，或得出其来源不支持的结论。编码基准不仅可以评估生成的代码是否可用，还可以评估 Agent 是否访问了授权范围之外的文件。对数据处理 Agent 的评估可以将其方法和结果与既定的人工工作流程进行比较。\n\n这些例子指向一个更长期的目标——一个参与式基准，由科学家帮助定义 Agent 应接受测试的研究实践和安全要求。我们希望评估 Ai2 或其他地方开发的系统是否遵循其被使用领域的标准，以及它们是否完成分配的任务。\n\n这些评估仍是待与科学家共同开发和测试的提案，而非成熟的解决方案。但它们为我们在 Ai2 的工作提供了一个方向：构建开放的科研工具意味着让其行为和局限性更容易被调查，并让研究社区在定义何为可信表现方面发挥作用。\n\n## 让科学判断保持在流程中\n\n验证只是将 AI 工具用于科学时的一项考量。受访者还提出了一个更根本的问题——当 AI 接管部分研究过程时，科学专业知识会怎样？\n\n一位早期职业生物学家描述了自己刻意限制 AI 使用，以便掌握他希望教给未来学生的技能。另一位研究者质疑，如果研究人员在这个过程中什么也没学到，那么产生正确结果是否足够：即使输出完美，“获得完美输出的人从中得到了什么？”\n\n一些参与者担心 AI 辅助研究可能削弱学习，尽管自动化的价值在一定程度上取决于研究人员和任务。经验丰富的科学家可以合理地将熟悉的流程委托出去以节省时间，而仍在学习该流程的人则可能从亲自完成工作中受益。\n\n参与者还围绕涉及智力贡献的活动划定了不同边界。一位生物学家拒绝使用 AI 生成研究想法，认为这是应由个人保留的责任。其他人则对 AI 辅助构思或写作更为开放。例如，一位人类学家认为，科学论文的某些部分，特别是对方法和结果的常规描述，足够程式化，可以从自动化中受益。\n\n即使是尝试用 AI 写作的研究人员，有时也会重新考虑。一位政治学家描述了自己使用 Claude 帮助修改手稿，随后决定重写整篇论文，因为自己智力贡献的边界已变得模糊。“我不知道哪些是 AI 写的，哪些是我写的，”这位研究者说。\n\n语境也很重要。在投稿前让 AI 对手稿提出批评，受到一些参与者的欢迎；而用它来评审另一位研究者的未发表工作则引发担忧。这种区别不仅涉及技术能力；同行评审承载着保密、署名和公平评估他人研究的责任。\n\n这些分歧表明，负责任的自动化不能由一份通用的可接受与不可接受任务清单来定义。科学领域有不同的规范，即使执行类似工作，个体研究人员也可能有不同目标。\n\n同样的张力也适用于 AI 系统中内置的保障措施。一位政治学家描述了防止 AI 工具讨论某些主题的内容限制可能如何干扰关于政治暴力或人权侵犯的正当研究。与此同时，处理敏感人类受试者数据的参与者希望获得关于隐私、访问权限和信息使用方式的更强保证。\n\n两者都是合理的关切。一个在没有足够保障措施的情况下行动的 Agent 可能泄露机密数据或产生有害结果，而一个受到过于宽泛约束的 Agent 则可能阻止科学家 pursuing 正当的研究方向。\n\n这就是为什么科学社区需要在塑造 AI 协助边界方面发挥有意义的作用。开发者不仅需要了解 Agent 可以执行哪些活动，还需要了解研究人员希望保留哪些决策、哪些地方需要保障措施——以及这些保障措施可能在哪些地方阻碍有价值的工作。\n\n## 与科学家共同构建 AI Agent\n\n我们的发现指向……"
+      },
+      {
+        "id": "ds_1126_013",
+        "category": "深度解读",
+        "title": "用Codex与Astra搜寻系外行星：OpenAI案例",
+        "tldr": "两位业余天文学家利用Codex与Astra分析NASA开普勒与TESS公开数据，发现潜在系外行星，展示AI工具在公民科学中的实际应用潜力。",
+        "tags": [
+          "Codex",
+          "Astra",
+          "系外行星",
+          "科学发现"
+        ],
+        "url": "https://openai.com/index/searching-for-distant-planets-with-astra",
+        "sourceName": "OpenAI News",
+        "score": 3.5,
+        "userFeedback": null,
+        "contentZh": "天文学家自[1992年首次宣布发现系外行星⁠(opens in a new window)](https://www.nature.com/articles/355145a0)以来，已确认了超过[6,400颗太阳系外行星⁠(opens in a new window)](https://exoplanetarchive.ipac.caltech.edu/)。一个由业余天文学家组成的全球社群长期以来一直是这项搜寻工作的一部分。有些人翻查公开的望远镜数据，寻找恒星亮度中微小而重复的下降——这可能是轨道行星的信号。另一些人则用自己的望远镜观测下一次亮度下降，并与研究人员分享所见。\n\n按方法累计的系外行星发现数量\n\n凌星法\n\n径向速度法\n\n微引力透镜法\n\n直接成像法\n\n其他\n\n*数据来自 NASA 系外行星档案的[行星系统综合参数表⁠(opens in a new window)](https://exoplanetarchive.ipac.caltech.edu/cgi-bin/TblView/nph-tblView?app=ExoTbls&config=PSCompPars)。2026年数据为截至2026年11月24日的年初至今数据。\n\n## 天文学家如何发现系外行星\n\n天文学家多年来一直在这项搜寻中使用 AI。2017年，研究人员用 NASA [开普勒太空望远镜⁠(opens in a new window)](https://science.nasa.gov/mission/kepler/)中天文学家已经检查过的15,000个信号训练了一个神经网络。从这些样本中，模型学会了识别星光中哪些模式最有可能来自行星。当研究人员用它检查较弱的信号时，其中一个信号引导他们发现了[一颗围绕名为 Kepler-90 的恒星运行的第八颗行星⁠(opens in a new window)](https://www.nasa.gov/news-release/artificial-intelligence-nasa-data-used-to-discover-eighth-planet-circling-distant-star/)。\n\n如今，像 Astra 这样的工具正在帮助业余天文学家设计和运行自己的搜寻，而且往往是在已经产生过较明显系外行星信号的数据上进行。OpenAI 工程师 Kevin Bond 因热爱拍摄夜空而走进天文学。他用 Codex 搜索了开普勒望远镜对约10万颗恒星的观测数据；开普勒是一项行星搜寻任务，运行于2009年至2018年。电子邮件基础设施初创公司 Primitive 的创始人 Ethan Byrd 一直热爱天文学。他独立于 Bond 开展工作，尝试了多个 AI 模型，最终选择 Astra 帮助他分析来自约1,900万颗恒星的望远镜数据。\n\n![Image 2: 日落时分，一个人蹲在屋顶上三脚架相机旁。](https://images.ctfassets.net/kftzwdyauwt9/3lbz9p43Y9HBfty25S0RCQ/521c489c1fe8bcf462b0a4e07d5701ba/exoplanets-rooftop-at-sunset.jpg?w=3840&q=90&fm=webp)\n\n两次搜寻都识别出了潜在的系外行星。Bond 和 Byrd 现在已转向天文学家，请他们对自己的结果进行独立评估。Bond 联系了 SETI 研究所的一位天文学家，后者进行了独立搜寻，并在开普勒数据中发现了其中两个相同的信号。Byrd 把他最强的候选之一发送给了参与 NASA 凌星系外行星巡天卫星（TESS）任务的研究人员。该候选已排队等待进一步分析，另有两个候选正在等待提交。\n\n## 寻找星光中的亮度下降\n\n发现系外行星最常见的方法之一是观测它所环绕的恒星。当一颗行星从地球视角经过其恒星前方时，它会遮挡极少量星光。天文学家将这种穿越称为凌星。在恒星亮度随时间变化的图表（称为光变曲线）上，凌星表现为一个凹陷。如果这个凹陷以规律间隔反复出现，天文学家就知道何时再次观测它。\n\n在数千颗恒星中搜寻这种模式，部分是一个编程问题。天文学家已经发表了从多年测量数据中挑出微弱、重复凹陷的方法。Bond 用 Codex 比较这些方法，将它们组合成一个搜索程序，并测试代码改动是否改善了搜索。一个 AI agent 扫描光变曲线以寻找有希望的信号。另一个则对第一个标记出的候选进行更详细的检查。\n\n![Image 3: 一名摄影师在三脚架相机旁用笔记本电脑工作，屏幕和身后的城市灯光照亮了他。](https://images.ctfassets.net/kftzwdyauwt9/6710Vp9hZFgzFm8CHOCLrt/20f95c70c1d86c050770e61c0fc02f3d/exoplanets-working-at-laptop-square.jpg?w=3840&q=90&fm=webp)\n\n![Image 4: 黑暗中，双手放在笔记本电脑键盘上，屏幕上可见星空。](https://images.ctfassets.net/kftzwdyauwt9/3He6T0iGapx53CIbUOaOxC/55df549454b5e85d7162d9c6f9b2bfbd/exoplanets-laptop-in-the-field.jpg?w=3840&q=90&fm=webp)\n\nBond 在开普勒太空望远镜的公开数据上运行了该程序。搜索标记出200多个信号，其中包括10个来自此前已确认行星的信号。找到这些已知行星让 Bond 相信，该程序能够挑出他正在寻找的那类信号。\n\n两颗恒星脱颖而出。第一颗是 KIC 5689121，位于天琴座，是一颗相对较冷的恒星，大小约为太阳的一半。Codex 搜索发现其亮度每13.8天出现一次下降。如果是由行星造成的，其遮挡的光量表明该行星直径可能约为地球的2.4倍。\n\n这四条曲线显示了按13.77天周期对齐的同一组开普勒观测数据。\n\n第二颗恒星 KIC 6691030 较暗，位于北天。Codex 搜索发现其亮度每4.8天出现一次下降，与一颗比海王星更小的行星相符。这些正是 SETI 研究所天文学家独立发现的两个信号。确认其成因可能需要数月或数年。\n\n> “Kevin 的工作表明，配备 AI 的公民科学家如何帮助天文学家探索开普勒补充星表——一个远超开普勒原始目标范围的庞大恒星集合。他的流程在传统搜索可能遗漏的数据中发现了有希望的候选。我们的初步检查令人鼓舞，后续观测将告诉我们更多。”\n\nVishal Gajjar，SETI 研究所国际 SETI 项目副主任\n\nByrd 用 Astra 设计了两项搜索。一项广泛寻找系外行星候选。另一项聚焦于恒星的宜居带。宜居带是距恒星的一定距离范围，在该范围内，拥有合适大气层的行星可以在其表面维持液态水。\n\n随后，Byrd 让 Astra 审阅已发表的方法、构建搜索软件，并对有希望的信号进行初步检查。他的搜索利用了 NASA 于2018年发射的 TESS 的观测数据，以及其他公开望远镜档案的数据。\n\n![Image 5: 来自 NASA TESS 拼接图的恒星布满2018—2020年巡天的天空。南北观测之间有一条宽阔的间隙。一个被圈出的开普勒天区连接到一个标有 KIC 5689121 的插图。](https://images.ctfassets.net/kftzwdyauwt9/1Vvl8uwapXZthgt742dVFs/627a21d7b0a87c8aaae3250ffb45b97f/kepler-tess-orange-marker-dark.png?w=3840&q=90&fm=webp)\n\n开普勒对同一个天区观测了四年。TESS 在2018年至2020年的前26个扇区中巡天了南北两个半球。星场来自[NASA TESS 截至2025年9月的拼接图⁠(opens in a new window)](https://svs.gsfc.nasa.gov/14985/)，并裁剪到该原始巡天覆盖范围。较宽的间隙显示了 TESS 在六个观测扇区中指向更北的位置。插图在原[开普勒天区⁠(opens in a new window)](https://archive.stsci.edu/missions-and-data/kepler/field)中标出了 [KIC 5689121⁠(opens in a new window)](https://archive.stsci.edu/kepler/kic10/search.php?action=Search&kic_kepler_id=5689121)。参见[NASA 最终主任务覆盖图⁠(opens in a new window)](https://heasarc.gsfc.nasa.gov/docs/tess/what-is-tess.html)及其[早期视场动画⁠(opens in a new window)](https://svs.gsfc.nasa.gov/12885/)。\n\n对数据的第一轮处理发现了49个候选。Byrd 把他最强的候选之一发送给了参与 TESS 任务的研究人员，目前正在等待进一步分析。他的搜索仍在运行。\n\n## 确认一颗行星需要什么？\n\n当天文学家看到一颗恒星变暗时，他们必须考虑还有什么其他原因可以解释它。两颗恒星相互从前方经过也能产生类似的亮度下降。甚至望远镜内部的温度变化也可能影响仪器，足以让一颗恒星看起来变暗。\n\n天文学家可以用统计方法表明，系外行星是一系列亮度下降最可能的解释。他们还可以收集更多观测数据，有时使用不同的方法。例如，轨道行星的引力会拉扯其恒星，使其轻微地朝向和远离我们运动。这种运动称为径向速度，表现为恒星光线颜色的微小偏移。随后，天文学家将发现发表在同行评审期刊上，以便他人审查证据。\n\n对 Bond 和 Byrd 来说，每个候选都是一个可以检验的问题。如果有一颗行星每13.8天经过天琴座那颗恒星前方，天文学家就可以观测下一次穿越。进一步观测有助于确定亮度下降是否按预期重复，而额外检查有助于确定其原因。\n\n![Image 6: 银河斜跨布满星星的天空，下方是剪影般的山脊。](https://images.ctfassets.net/kftzwdyauwt9/2SSdNPM9DjCXsOEbYcsh8B/55dabb5bdee994566b1abc42f343519f/kevin-bond-milky-way-over-ridgeline.jpg?w=3840&q=90&fm=webp)\n\n摄影：Kevin Bond\n\n![Image 7: 一轮铜色月亮带着苍白边缘，悬挂在点缀着微弱星星的近黑色天空中。](https://images.ctfassets.net/kftzwdyauwt9/3J85rc2RVvJoYQqv3OKoGo/743ec2f901fb39d6a9ddbf2eb2836374/kevin-bond-copper-moon-square.jpg?w=3840&q=90&fm=webp)\n\n## 参与搜寻\n\n你不需要拥有望远镜也能作出贡献。NASA 的 [Exoplanet Watch⁠(opens in a new window)](https://science.nasa.gov/citizen-science/exoplanet-watch/how-to-contribute/) 让你可以申请数据并学习自己绘制光变曲线。其更广泛的[系外行星公民科学项目⁠(opens in a new window)](https://science.nasa.gov/exoplanets/citizen-science/)提供了其他参与方式。\n\n如果你能使用望远镜，Exoplanet Watch 会引导用户如何收集凌星系外行星的数据并参与观测活动。[AAVSO 的系外行星观测项目⁠(opens in a new window)](https://aavso.org/exoplanet-photometry/)可以教你如何测量星光中的亮度下降，并与研究该行星的研究人员分享你的观测。而[Unistellar 网络调查 TESS 系外行星项目⁠(opens in a new window)](https://science.unistellar.com/exoplanets/unite/)协调世界各地拥有特定类型望远镜的志愿者观测同一颗恒星，帮助天文学家捕捉可能持续超过一夜的凌星。\n\n天文学有着悠久的历史，世界各地的人们追随自己的好奇心并分享他们的发现。Bond 和 Byrd 正是这一传统的一部分。"
+      }
+    ]
+  },
   "2026-11-25": {
     "reportDate": "2026-11-25",
     "overview": "今日核心动态聚焦于AI在科学发现与算法优化领域的突破：OpenAI的GPT-6展现出内在的蛋白质设计能力，DeepMind则利用智能体与形式化验证加速量子算法发现。同时，AI智能体在现实任务中的可靠性短板被新基准揭示，而Anthropic股价跌破IPO发行价，为AI初创公司的估值前景蒙上阴影。",
