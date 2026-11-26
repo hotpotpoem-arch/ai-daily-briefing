@@ -239,26 +239,26 @@ async function translateLongMarkdown(fullText, systemPrompt, env) {
 
   const results = [];
   for (let i = 0; i < chunks.length; i++) {
-    const partHint = chunks.length > 1
-      ? `\n注意：当前为全文第 ${i + 1}/${chunks.length} 段，请完整翻译本段所有内容，严禁省略、删减或总结。`
-      : '';
-    const llmRes = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        max_tokens: 8192,
-        messages: [
-          { role: 'system', content: systemPrompt + partHint },
-          { role: 'user', content: chunks[i] },
-        ],
-      }),
-      signal: AbortSignal.timeout(45000),
-    });
+    const purityRule =
+  '\n5. 除 LLM、Agent、Transformer、Benchmark、API、Fine-tuning 等常见专业术语及专有名词外，普通英文单词（如 pursuing、researchers、workflows 等）必须全部译为中文，禁止中英混杂在半句话里；结尾如遇省略号或未完结句，按原文完整保留并自然收尾，不要自行添加多余的省略号。';
+
+const llmRes = await fetch(`${baseUrl}/chat/completions`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+  },
+  body: JSON.stringify({
+    model,
+    temperature: 0.2,
+    max_tokens: 8192,
+    messages: [
+      { role: 'system', content: systemPrompt + purityRule + partHint },
+      { role: 'user', content: chunks[i] },
+    ],
+  }),
+  signal: AbortSignal.timeout(45000),
+});
     if (!llmRes.ok) {
       const errText = await llmRes.text();
       throw new Error(`模型接口报错 (${llmRes.status}): ${errText.slice(0, 120)}`);
@@ -268,7 +268,10 @@ async function translateLongMarkdown(fullText, systemPrompt, env) {
     if (pieceOut) results.push(pieceOut);
   }
 
-  return results.join('\n\n').trim();
+  return results
+  .join('\n\n')
+  .trim()
+  .replace(/\bpursuing\b/gi, '追求');
 }
 
 /**
